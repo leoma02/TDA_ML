@@ -1,1 +1,0 @@
-This repo contains a code I'm using for my master thesis to explore the role of Topological Data Analysis (TDA) combined with Neural Operators when trajectories of ODE systems, in this case FitzHugh Nagumo, exhibit limit cycles. This code is based on the one in the repo by Giovanni Ziarelli: https://github.com/giovanniziarelli/inferringTRdynamicsML#
