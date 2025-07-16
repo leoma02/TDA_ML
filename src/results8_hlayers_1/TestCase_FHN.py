@@ -110,7 +110,7 @@ for i in range(1,NTrain+1):
   x_temp = utils.traj_computation(epsilon,a,b,Iext,theta,t_max,dt_num,v0,w0,0)
   trajectories.append(x_temp)
   # x0 batch
-  x0.append(2*x_temp[0]/5)#normalized IC: prova a rendere automatica questa normalizzazione. Il fattore 2/5 è il fattore della normalizzazione nell'intervallo che abbiamo in mente applicando la funzione normalize_fw(...) in utils a x_temp[0] con i rispettivi bound di v0 e w0 
+  x0.append(2*x_temp[0]/5)#normalized IC
 
   # u_seq batch costante
   u = np.full((len(x_temp), 1), Iext, dtype=np.float64)
@@ -140,8 +140,7 @@ for i in range(1,NTest+1):
   trajectories.append(x_temp)
 
   # x0 batch
-  x0.append(2*x_temp[0]/5)#normalized IC (come sopra)
-
+  x0.append(2*x_temp[0]/5)#normalized IC
   # u_seq batch costante
   u = np.full((len(x_temp), 1), Iext, dtype=np.float64)
   inputs.append(u)
@@ -158,13 +157,11 @@ n_size_testg = x0_test.shape[0]
 training_var_numpy = u_train
 testing_var_numpy  = u_test
 
-# NOTA: è importante normalizzare anche il target (in questo caso ho chiamato questi campi 'out_fields' piuttosto che 'target' perché in utils era già predisposta la normalizzazione
-
 dataset_train = {
         'times'         : t_num.T, # [num_times]
         'inp_parameters': None, # [num_samples x num_par]
         'inp_signals'   : training_var_numpy, # [num_samples x num_times x num_signals]
-        'out_fields'    : training_target, #  [num_samples x num_times x num_targets] # RINOMINATO CAMPO
+        'out_fields'        : training_target, #  [num_samples x num_times x num_targets]
         'num_times'     : t_max,
         'time_vec'      : t.T,
         'frac'          : int(dt/dt_num)
@@ -173,7 +170,7 @@ dataset_testg = {
         'times'         : t_num.T, # [num_times]
         'inp_parameters': None, # [num_samples x num_par]
         'inp_signals'   : testing_var_numpy, # [num_samples x num_times x num_signals]
-        'out_fields'    : testing_target, #  [num_samples x num_times x num_targets] # RINOMINATO CAMPO
+        'out_fields'        : testing_target, #  [num_samples x num_times x num_targets]
         'num_times'     : t_max,
         'time_vec'      : t.T,
         'frac'          : int(dt/dt_num)
@@ -204,9 +201,6 @@ input_shape = (num_latent_states + len(problem['input_parameters']) + len(proble
 ####NNdyn.add(tf.keras.layers.Dense(4, kernel_initializer=tf.keras.initializers.RandomNormal(stddev=variance_init)))
 ####NNdyn.add(tf.keras.layers.Dense(num_latent_states, kernel_initializer=tf.keras.initializers.RandomNormal(stddev=variance_init)))
 ####NNdyn.summary()
-
-# NOTA: ho fatto un po' di tentativi a mano. Con questa rete si ottengono risultati soddisfacenti. Forse nella tua mancava la funzione di attivazione
-
 NNdyn = tf.keras.Sequential([
             tf.keras.layers.Dense(5, activation = tf.nn.tanh, input_shape = input_shape),#4
             tf.keras.layers.Dense(5, activation = tf.nn.tanh),#8
@@ -233,7 +227,7 @@ def evolve_dynamics(dataset, initial_lat_state): #initial_state (n_samples x n_l
 #%% Loss functions
 def loss_exp_beta(dataset, lat_states):
     state = evolve_dynamics(dataset, lat_states)
-    MSE = tf.reduce_mean(tf.square((state) - dataset['out_fields']))# / tf.square(dataset['out_fields'] )) # siccome è tutto normalizzato possiamo considerareMSE assoluto
+    MSE = tf.reduce_mean(tf.square((state) - dataset['out_fields']))# / tf.square(dataset['out_fields'] )) 
     return MSE
 
 def weights_reg(NN):
@@ -266,7 +260,7 @@ def loss_valid():
     l = loss_exp_beta(dataset_testg, x0_test)
     return l
 
-''' GRANDE DUBBIO (ANALOGO): le due loss che avevi definito vanno bene
+''' GRANDE DUBBIO (ANALOGO)
 # Validation metric
 def val_train():
     beta = evolve_dynamics(dataset_train, x0_train)
@@ -281,7 +275,6 @@ def val_train():
 val_metric = loss_valid
 
 #%% Training (Routine step 1) 
-# NOTA: perché avevi attivato eagerly? rallenta molto il training. Ti suggerisco di non usarlo e installare qualche ambiente virtuale con i pacchetti giusti e la versione di python corretta per evitare conflitti (se era quello il problema) :)
 #tf.config.run_functions_eagerly(True)
         
 opt_train = optimization.OptimizationProblem(trainable_variables_train, loss_train, val_metric)
@@ -289,22 +282,21 @@ opt_train = optimization.OptimizationProblem(trainable_variables_train, loss_tra
 num_epochs_Adam_train = 500 #500
 num_epochs_BFGS_train = 5000 #1000
 
-# Ho provato a fare Adam con riduzione del learning rate (si potrebbe provare una policy tipo reduce on plateau) + BFGS: risultato migliore è err generalizzazione circa 1e-7
 print('training (Adam)...')
 init_adam_time = time.time()
+#opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=5e-3 * 25 / size_num_v))
 opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-2))
 end_adam_time = time.time()
-
 print('training (Adam)...')
 init_adam_time = time.time()
+#opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=5e-3 * 25 / size_num_v))
 opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=5e-3))
 end_adam_time = time.time()
 
 print('training (Adam)...')
 init_adam_time = time.time()
+#opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=5e-3 * 25 / size_num_v))
 opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-3))
-end_adam_time = time.time()
-
 print('training (BFGS)...')
 init_bfgs_time = time.time()
 opt_train.optimize_BFGS(num_epochs_BFGS_train)
@@ -312,7 +304,7 @@ end_bfgs_time = time.time()
 
 train_times = [end_adam_time - init_adam_time, end_bfgs_time - init_bfgs_time]
 
-#tf.config.run_functions_eagerly(False)
+tf.config.run_functions_eagerly(False)
 #%% Saving the rhs-NN (NNdyn) 
 #NNdyn.save(folder + 'NNdyn')
 

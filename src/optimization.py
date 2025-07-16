@@ -85,8 +85,8 @@ class OptimizationProblem():
             self.iterations_history.append(self.iteration)
             self.loss_train_history.append(self.ag_train_loss())
             self.loss_valid_history.append(self.ag_valid_loss())
-            #print('epoch% 5d   -   training loss: %1.3e   -   validation loss %1.3e' % 
-            #      (self.iteration, self.loss_train_history[-1], self.loss_valid_history[-1]))
+            print('epoch% 5d   -   training loss: %1.3e   -   validation loss %1.3e' % 
+                  (self.iteration, self.loss_train_history[-1], self.loss_valid_history[-1]))
         self.iteration += 1
    
     def basin_hopping_callback(self, x, f, accept):
@@ -97,7 +97,7 @@ class OptimizationProblem():
     # !
     def optimize_keras(self, num_epochs, optimizer):
         for _ in range(num_epochs):
-            print('Epoch: ' + str(_))
+            #print('Epoch: ' + str(_))
             optimizer.apply_gradients(zip(self.ag_train_grad(), self.variables))
             self.iteration_callback()
     

@@ -1,0 +1,2 @@
+model_checkpoint_path: "variables_NNdyn-1"
+all_model_checkpoint_paths: "variables_NNdyn-1"
