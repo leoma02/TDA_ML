@@ -85,8 +85,8 @@ class OptimizationProblem():
             self.iterations_history.append(self.iteration)
             self.loss_train_history.append(self.ag_train_loss())
             self.loss_valid_history.append(self.ag_valid_loss())
-            #print('epoch% 5d   -   training loss: %1.3e   -   validation loss %1.3e' % 
-            #      (self.iteration, self.loss_train_history[-1], self.loss_valid_history[-1]))
+            print('epoch% 5d   -   training loss: %1.3e   -   validation loss %1.3e' % 
+                  (self.iteration, self.loss_train_history[-1], self.loss_valid_history[-1]))
         self.iteration += 1
    
     def basin_hopping_callback(self, x, f, accept):
@@ -97,7 +97,7 @@ class OptimizationProblem():
     # !
     def optimize_keras(self, num_epochs, optimizer):
         for _ in range(num_epochs):
-            print('Epoch: ' + str(_))
+            #print('Epoch: ' + str(_))
             optimizer.apply_gradients(zip(self.ag_train_grad(), self.variables))
             self.iteration_callback()
     
@@ -169,23 +169,3 @@ class VariablesStitcher:
 
     def stitch(self, v = None):
         return tf.dynamic_stitch(self.idx, self.variables if v is None else v)
-
-'''
-    def compute_gradient(self):
-        with tf.GradientTape(watch_accessed_variables = False) as tape:
-            tape.watch(self.variables)
-            loss_value = self.loss_train()
-        return tape.gradient(loss_value, self.variables, unconnected_gradients = tf.UnconnectedGradients.ZERO)
-
-    def get_gradient_and_loss(self, params_1d):
-        self.stitcher.update_variables(params_1d)
-        with tf.GradientTape(watch_accessed_variables = False) as tape:
-            tape.watch(self.variables)
-            loss_value = self.loss_train()
-        grads = self.stitcher.stitch(tape.gradient(loss_value, self.variables, unconnected_gradients = tf.UnconnectedGradients.ZERO))
-        return loss_value, grads
-
-    def ag_train_loss_grad_numpy(self, params_1d):
-        loss, grad = self.ag_train_loss_grad(params_1d)
-        return loss.numpy(), grad.numpy()
-'''

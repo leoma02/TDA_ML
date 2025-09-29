@@ -69,6 +69,8 @@ def dataset_normalize_epi(dataset, problem, normalization_definition):
         dataset['inp_parameters'] = normalize_forw(dataset['inp_parameters'], normalization['inp_parameters_min'], normalization['inp_parameters_max'], axis = 1)
     if dataset['inp_signals'] is not None:
         dataset['inp_signals']    = normalize_forw(dataset['inp_signals']   , normalization['inp_signals_min']   , normalization['inp_signals_max']   , axis = 2)
+    if dataset['out_fields'] is not None:
+        dataset['out_fields']    = normalize_forw(dataset['out_fields']   , normalization['out_fields_min']   , normalization['out_fields_max']   , axis = 2)
     
 def denormalize_output(out_fields, problem, normalization_definition):
     normalization = analyze_normalization(problem, normalization_definition)
@@ -126,9 +128,9 @@ def process_dataset_epi_real(dataset, problem, normalization_definition, dt = No
         if tf.rank(dataset['inp_signals']) == 1:
             dataset['inp_signals'] = tf.expand_dims(dataset['inp_signals'], axis = 0)
     dataset['time_vec'] = tf.squeeze(tf.convert_to_tensor(dataset['time_vec'], tf.float64))
-    dataset['target'] = tf.squeeze(tf.convert_to_tensor(dataset['target'], tf.float64))
-    if tf.rank(dataset['target']) == 1:
-        dataset['target'] = tf.expand_dims(dataset['target'], axis = 0)
+    #dataset['target'] = tf.squeeze(tf.convert_to_tensor(dataset['target'], tf.float64))
+    if tf.rank(dataset['out_fields']) == 1:
+        dataset['out_fields'] = tf.expand_dims(dataset['out_fields'], axis = 0)
     dataset['times'] = tf.squeeze(tf.convert_to_tensor(dataset['times'], tf.float64))
 
 def cut_dataset_epi_real(dataset, T_max):

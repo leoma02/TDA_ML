@@ -52,16 +52,19 @@ x_max = np.array([v_max, w_max])
 #%% Generating folders
 folder = 'results' + str(neurons) + '_hlayers_' + str(layers) + '/'
 
+shutil.rmtree(folder)
+
 if os.path.exists(folder) == False:
-    os.mkdir(folder)
-else:
-    shutil.rmtree(folder)
     os.mkdir(folder)
 folder_train = folder + 'train/'
 
 #%% Define problem and normalization
 problem = {
-    "input_parameters": [],
+    "input_parameters": [
+        { "name": "a" },
+        { "name": "b" },
+        { "name": "epsilon" },
+    ],
     "input_signals": [
         { "name": "I_ext" },
     ],
@@ -74,6 +77,12 @@ problem = {
 normalization = {
     'time': {
         'time_constant' : dt_base
+    },
+
+    'input_parameters': {
+        'a': {'min': 0.1, 'max': 1.0},
+        'b': {'min': 0.1, 'max': 1.0},
+        'epsilon': {'min': 0.0, 'max': 1.2}
     },
 
     'input_signals': {
@@ -95,13 +104,15 @@ NTest  = 50
 trajectories = []
 inputs       = []
 x0           = []
-epsilon      = 1/12.5
-a            = 0.7
-b            = 0.8
+a_vec        = []
+b_vec        = []
+eps_vec      = []
 
 for i in range(1,NTrain+1):
-
-    Iext    = np.random.uniform(0.5,0.9)
+    epsilon = np.random.uniform(0,1.2)
+    a       = np.random.uniform(0.1,1)
+    b       = np.random.uniform(0.1,1)
+    Iext    = np.random.uniform(0.2,1.4)
     v0      = 1.5
     w0      = v0
 
@@ -110,24 +121,35 @@ for i in range(1,NTrain+1):
     x0.append( (2.0*x_temp[0]-x_min-x_max)/(x_max-x_min) )
 
     u        = np.full((len(x_temp), 1), (2.0*Iext-u_min-u_max)/(u_max-u_min), dtype=np.float64)
+    a_temp   = np.full((len(x_temp), 1), a, dtype=np.float64)
+    b_temp   = np.full((len(x_temp), 1), b, dtype=np.float64)
+    eps_temp = np.full((len(x_temp), 1), epsilon, dtype=np.float64)
+    a_vec.append(a_temp)
+    b_vec.append(b_temp)
+    eps_vec.append(eps_temp)
     inputs.append(u)
 
 x0_train        = np.stack(x0, axis=0).astype(np.float64)
 u_train         = np.stack(inputs, axis=0).astype(np.float64)
 training_target = np.stack(trajectories, axis=0).astype(np.float64)
+a_train         = np.stack(a_vec, axis=0).astype(np.float64)
+b_train         = np.stack(b_vec, axis=0).astype(np.float64)
+eps_train       = np.stack(eps_vec, axis=0).astype(np.float64)
 
 #%%
 
 trajectories = []
 inputs       = []
 x0           = []
-a            = 0.7
-b            = 0.8
-epsilon      = 1/12.5
+a_vec        = []
+b_vec        = []
+eps_vec      = []
 
 for i in range(1,NTest+1):
-    
-    Iext    = np.random.uniform(0.5,0.9)
+    epsilon = np.random.uniform(0,1.2)
+    a       = np.random.uniform(0.1,1)
+    b       = np.random.uniform(0.1,1)
+    Iext    = np.random.uniform(0.2,1.4)
     v0      = 1.5
     w0      = v0
 
@@ -136,21 +158,32 @@ for i in range(1,NTest+1):
     x0.append( (2.0*x_temp[0]-x_min-x_max)/(x_max-x_min) )
 
     u        = np.full((len(x_temp), 1), (2.0*Iext-u_min-u_max)/(u_max-u_min), dtype=np.float64)
+    a_temp   = np.full((len(x_temp), 1), a, dtype=np.float64)
+    b_temp   = np.full((len(x_temp), 1), b, dtype=np.float64)
+    eps_temp = np.full((len(x_temp), 1), epsilon, dtype=np.float64)
+    a_vec.append(a_temp)
+    b_vec.append(b_temp)
+    eps_vec.append(eps_temp)
     inputs.append(u)
 
 x0_test        = np.stack(x0, axis=0).astype(np.float64)
 u_test         = np.stack(inputs, axis=0).astype(np.float64)
 testing_target = np.stack(trajectories, axis=0).astype(np.float64)
+a_test         = np.stack(a_vec, axis=0).astype(np.float64)
+b_test         = np.stack(b_vec, axis=0).astype(np.float64)
+eps_test       = np.stack(eps_vec, axis=0).astype(np.float64)
 
 #%% Dataset parameters
 n_size             = x0_train.shape[0]
 n_size_testg       = x0_test.shape[0]
 training_var_numpy = u_train
 testing_var_numpy  = u_test
+inp_params_train   = np.stack((a_train[:,0,0],b_train[:,0,0],eps_train[:,0,0]), axis=-1)
+inp_params_test    = np.stack((a_test[:,0,0],b_test[:,0,0],eps_test[:,0,0]), axis=-1)
 
 dataset_train = {
         'times'         : t_num.T,            # [num_times]
-        'inp_parameters': None,               # [num_samples x num_par]
+        'inp_parameters': inp_params_train,   # [num_samples x num_par]
         'inp_signals'   : training_var_numpy, # [num_samples x num_times x num_signals]
         'out_fields'    : training_target,    # [num_samples x num_times x num_targets] # RINOMINATO CAMPO
         'num_times'     : t_max,
@@ -159,7 +192,7 @@ dataset_train = {
 }
 dataset_testg = {
         'times'         : t_num.T,            # [num_times]
-        'inp_parameters': None,               # [num_samples x num_par]
+        'inp_parameters': inp_params_test,    # [num_samples x num_par]
         'inp_signals'   : testing_var_numpy,  # [num_samples x num_times x num_signals]
         'out_fields'    : testing_target,     # [num_samples x num_times x num_targets] # RINOMINATO CAMPO
         'num_times'     : t_max,
@@ -193,10 +226,11 @@ def evolve_dynamics(dataset, initial_lat_state): #initial_state (n_samples x n_l
     lat_state_history = tf.TensorArray(tf.float64, size = dataset['num_times'])
     lat_state_history = lat_state_history.write(0, lat_state)
     dt_ref = normalization['time']['time_constant']
+    inp_params = dataset['inp_parameters']  # shape (N, num_params)
     
     # time integration
     for i in tf.range(dataset['num_times'] - tf.constant(1)):
-        inputs = [lat_state, dataset['inp_signals'][:,i,:]]
+        inputs = [lat_state, dataset['inp_signals'][:,i,:], inp_params]
         lat_state = lat_state + dt_num/dt_ref * NNdyn(tf.concat(inputs, axis = -1))
         lat_state_history = lat_state_history.write(i + 1, lat_state)
 
@@ -266,9 +300,9 @@ train_times = [end_adam_time - init_adam_time, end_bfgs_time - init_bfgs_time]
 
 #%% Testing
 variables = evolve_dynamics(dataset_testg, x0_test)
-variables = variables[17,:,:]
+variables = variables[1,:,:]
 tt        = t_num[0,:]
-target    = testing_target[17,:,:]
+target    = testing_target[1,:,:]
 
 plt.plot(tt,5/2* variables[:,0],    'k--', label='v pred')
 plt.plot(tt, target[:,0], 'r-', label='v true')
