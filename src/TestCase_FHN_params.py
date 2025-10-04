@@ -25,29 +25,37 @@ class ClipConstraint(tf.keras.constraints.Constraint):
     def __call__(self, w):
         return tf.clip_by_value(w, self.min_value, self.max_value)
 
-save_train = 1    # save training
-
+save_train      = 1    # save training
+coarse_training = 1    # enable/disable training with coarse dataset
 #%% Model parameters
-t_max             = 100                                  # time horizon
-dt                = 1                                    # real time step
-layers            = 1                                    # number of hidden layers
-neurons           = 8                                    # number of neurons of each layer 
-dt_base           = 1                                    # rescaling factor 
-variance_init     = 0.0001                               # initial variance of weights
-t                 = np.arange(0, t_max+dt, dt)[None,:]   # time values
-dt_num            = 0.1                                  # numerical time step
-t_num             = np.arange(0, t_max, dt_num)[None, :] # numerical time values
-num_latent_states = 2                                    # dimension of the latent space
-num_latent_params = 0                                    # number of unknown parameters to be estimated online
-num_input_var     = 1                                    # number of input variables
-v_min             = -2.5                                 # minimum value of v
-v_max             = 2.5                                  # maximum value of v
-w_min             = -2.5                                 # minimum value of w
-w_max             = 2.5                                  # maximum value of w
-u_min             = 0.2                                  # minimum value of I_ext
-u_max             = 1                                    # maximum value of I_ext
-x_min = np.array([v_min, w_min])
-x_max = np.array([v_max, w_max])
+t_max             = 100                                      # time horizon
+t_max_ext         = 200                                      # extended time horizon
+dt                = 1                                        # real time step
+layers            = 1                                        # number of hidden layers
+neurons           = 8                                        # number of neurons of each layer 
+dt_base           = 1                                        # rescaling factor 
+variance_init     = 0.0001                                   # initial variance of weights
+t                 = np.arange(0, t_max+dt, dt)[None,:]       # time values
+t_ext             = np.arange(0, t_max_ext+dt, dt)[None,:]   # extended time values
+dt_num            = 0.1                                      # numerical time step
+dt_ratio          = 50                                       # time step for coarse training data defined as dt_coarse/dt_num (for now, only multiples of dt_num)
+t_num             = np.arange(0, t_max, dt_num)[None, :]     # numerical time values
+t_num_ext         = np.arange(0, t_max_ext, dt_num)[None, :] # numerical time values
+num_latent_states = 2                                        # dimension of the latent space
+num_latent_params = 0                                        # number of unknown parameters to be estimated online
+num_input_var     = 1                                        # number of input variables
+v_min             = -2.5                                     # minimum value of v
+v_max             = 2.5                                      # maximum value of v
+w_min             = -2.5                                     # minimum value of w
+w_max             = 2.5                                      # maximum value of w
+u_min             = 0.2                                      # minimum value of I_ext
+u_max             = 1.4                                      # maximum value of I_ext
+a_min             = 0.1                                      # minimum value of a
+a_max             = 1.0                                      # maximum value of a
+b_min             = 0.1                                      # minimum value of b
+b_max             = 1.0                                      # maximum value of b
+epsilon_min       = 0.0                                      # minimum value of epsilon
+epsilon_max       = 1.2                                      # maximum value of epsilon
 
 #%% Generating folders
 folder = 'results' + str(neurons) + '_hlayers_' + str(layers) + '/'
@@ -80,9 +88,9 @@ normalization = {
     },
 
     'input_parameters': {
-        'a': {'min': 0.1, 'max': 1.0},
-        'b': {'min': 0.1, 'max': 1.0},
-        'epsilon': {'min': 0.0, 'max': 1.2}
+        'a': {'min': a_min, 'max': a_max},
+        'b': {'min': b_min, 'max': b_max},
+        'epsilon': {'min': epsilon_min, 'max': epsilon_max}
     },
 
     'input_signals': {
@@ -97,89 +105,30 @@ normalization = {
 
 #%% Importing/Generating dataset
 # Parameters definition
-theta  = 1
-NTrain = 50
-NTest  = 50
+theta     = 1
+NTrain    = 50
+NTest     = 50
+NTest_ext = 50 
 
-trajectories = []
-inputs       = []
-x0           = []
-a_vec        = []
-b_vec        = []
-eps_vec      = []
+# Generating training dataset
+x0_train, u_train, training_target, a_train, b_train, eps_train = utils.generate_dataset(NTrain, normalization, theta, t_max, dt_num)
 
-for i in range(1,NTrain+1):
-    epsilon = np.random.uniform(0,1.2)
-    a       = np.random.uniform(0.1,1)
-    b       = np.random.uniform(0.1,1)
-    Iext    = np.random.uniform(0.2,1.4)
-    v0      = 1.5
-    w0      = v0
+# Generating testing dataset
+x0_test, u_test, testing_target, a_test, b_test, eps_test = utils.generate_dataset(NTest, normalization, theta, t_max, dt_num)
 
-    x_temp = utils.traj_computation(epsilon,a,b,Iext,theta,t_max,dt_num,v0,w0,0)
-    trajectories.append(x_temp)
-    x0.append( (2.0*x_temp[0]-x_min-x_max)/(x_max-x_min) )
-
-    u        = np.full((len(x_temp), 1), (2.0*Iext-u_min-u_max)/(u_max-u_min), dtype=np.float64)
-    a_temp   = np.full((len(x_temp), 1), a, dtype=np.float64)
-    b_temp   = np.full((len(x_temp), 1), b, dtype=np.float64)
-    eps_temp = np.full((len(x_temp), 1), epsilon, dtype=np.float64)
-    a_vec.append(a_temp)
-    b_vec.append(b_temp)
-    eps_vec.append(eps_temp)
-    inputs.append(u)
-
-x0_train        = np.stack(x0, axis=0).astype(np.float64)
-u_train         = np.stack(inputs, axis=0).astype(np.float64)
-training_target = np.stack(trajectories, axis=0).astype(np.float64)
-a_train         = np.stack(a_vec, axis=0).astype(np.float64)
-b_train         = np.stack(b_vec, axis=0).astype(np.float64)
-eps_train       = np.stack(eps_vec, axis=0).astype(np.float64)
-
-#%%
-
-trajectories = []
-inputs       = []
-x0           = []
-a_vec        = []
-b_vec        = []
-eps_vec      = []
-
-for i in range(1,NTest+1):
-    epsilon = np.random.uniform(0,1.2)
-    a       = np.random.uniform(0.1,1)
-    b       = np.random.uniform(0.1,1)
-    Iext    = np.random.uniform(0.2,1.4)
-    v0      = 1.5
-    w0      = v0
-
-    x_temp = utils.traj_computation(epsilon,a,b,Iext,theta,t_max,dt_num,v0,w0,0)
-    trajectories.append(x_temp)
-    x0.append( (2.0*x_temp[0]-x_min-x_max)/(x_max-x_min) )
-
-    u        = np.full((len(x_temp), 1), (2.0*Iext-u_min-u_max)/(u_max-u_min), dtype=np.float64)
-    a_temp   = np.full((len(x_temp), 1), a, dtype=np.float64)
-    b_temp   = np.full((len(x_temp), 1), b, dtype=np.float64)
-    eps_temp = np.full((len(x_temp), 1), epsilon, dtype=np.float64)
-    a_vec.append(a_temp)
-    b_vec.append(b_temp)
-    eps_vec.append(eps_temp)
-    inputs.append(u)
-
-x0_test        = np.stack(x0, axis=0).astype(np.float64)
-u_test         = np.stack(inputs, axis=0).astype(np.float64)
-testing_target = np.stack(trajectories, axis=0).astype(np.float64)
-a_test         = np.stack(a_vec, axis=0).astype(np.float64)
-b_test         = np.stack(b_vec, axis=0).astype(np.float64)
-eps_test       = np.stack(eps_vec, axis=0).astype(np.float64)
+# Generating extended testing dataset
+x0_test_ext, u_test_ext, testing_target_ext, a_test_ext, b_test_ext, eps_test_ext = utils.generate_dataset(NTest_ext, normalization, theta, t_max_ext, dt_num)
 
 #%% Dataset parameters
-n_size             = x0_train.shape[0]
-n_size_testg       = x0_test.shape[0]
-training_var_numpy = u_train
-testing_var_numpy  = u_test
-inp_params_train   = np.stack((a_train[:,0,0],b_train[:,0,0],eps_train[:,0,0]), axis=-1)
-inp_params_test    = np.stack((a_test[:,0,0],b_test[:,0,0],eps_test[:,0,0]), axis=-1)
+n_size                 = x0_train.shape[0]
+n_size_testg           = x0_test.shape[0]
+training_var_numpy     = u_train
+testing_var_numpy      = u_test
+testing_var_numpy_ext  = u_test_ext
+inp_params_train       = np.stack((a_train[:,0,0],b_train[:,0,0],eps_train[:,0,0]), axis=-1)
+inp_params_test        = np.stack((a_test[:,0,0],b_test[:,0,0],eps_test[:,0,0]), axis=-1)
+inp_params_test_ext    = np.stack((a_test_ext[:,0,0],b_test_ext[:,0,0],eps_test_ext[:,0,0]), axis=-1)
+coarse_indexes         = np.arange(0,len(t_num[0,:]),dt_ratio)
 
 dataset_train = {
         'times'         : t_num.T,            # [num_times]
@@ -199,6 +148,25 @@ dataset_testg = {
         'time_vec'      : t.T,
         'frac'          : int(dt/dt_num)
 }
+dataset_test_ext = {
+        'times'         : t_num_ext.T,           # [num_times]
+        'inp_parameters': inp_params_test_ext,   # [num_samples x num_par]
+        'inp_signals'   : testing_var_numpy_ext, # [num_samples x num_times x num_signals]
+        'out_fields'    : testing_target_ext,    # [num_samples x num_times x num_targets] # RINOMINATO CAMPO
+        'num_times'     : t_max_ext,
+        'time_vec'      : t_ext.T,
+        'frac'          : int(dt/dt_num)
+}
+dataset_coarse = {
+        'times'         : t_num.T,            # [num_times]
+        'coarse_indexes': coarse_indexes,     
+        'inp_parameters': inp_params_train,   # [num_samples x num_par]
+        'inp_signals'   : training_var_numpy, # [num_samples x num_times x num_signals]
+        'out_fields'    : training_target,    # [num_samples x num_times x num_targets] # RINOMINATO CAMPO
+        'num_times'     : t_max,
+        'time_vec'      : t.T,
+        'frac'          : int(dt/dt_num)
+}
 #%%
 np.random.seed(0)
 tf.random.set_seed(0)
@@ -206,6 +174,8 @@ tf.random.set_seed(0)
 # We re-sample the time transients with timestep dt and we rescale each variable between -1 and 1.
 utils.process_dataset_epi_real(dataset_train, problem, normalization, dt = None, num_points_subsample = None)
 utils.process_dataset_epi_real(dataset_testg, problem, normalization, dt = None, num_points_subsample = None)
+utils.process_dataset_epi_real(dataset_test_ext, problem, normalization, dt = None, num_points_subsample = None)
+utils.process_dataset_epi_real(dataset_coarse, problem, normalization, dt = None, num_points_subsample = None)
 print(dataset_train["inp_signals"].shape)
 print(dataset_train["out_fields"].shape)
 
@@ -242,6 +212,16 @@ def loss_exp_beta(dataset, lat_states):
     MSE = tf.reduce_mean(tf.square((state) - dataset['out_fields'])) #siccome è tutto normalizzato possiamo considerareMSE assoluto
     return MSE
 
+def loss_exp_beta_coarse(dataset, lat_states):
+    state   = evolve_dynamics(dataset, lat_states)
+    indexes = tf.convert_to_tensor(dataset['coarse_indexes'], dtype=tf.int32)
+
+    state_sel = tf.gather(state, indexes, axis=1)
+    out_sel   = tf.gather(dataset['out_fields'], indexes, axis=1)
+
+    MSE = tf.reduce_mean(tf.square(state_sel - out_sel))
+    return MSE
+
 def weights_reg(NN):
     return sum([tf.reduce_mean(tf.square(lay.kernel)) for lay in NN.layers])/len(NN.layers)
 
@@ -264,57 +244,166 @@ def val_train():
     l = loss_exp_beta(dataset_train, x0_train)
     return l 
 
+def loss_valid_ext():
+    l = loss_exp_beta(dataset_test_ext, x0_test_ext)
+    return l
+
+def loss_train_coarse():
+    l = nu_loss_train * loss_exp_beta_coarse(dataset_coarse, x0_train) + alpha_reg * weights_reg(NNdyn)
+    return l
+
 val_metric = loss_valid
 
-#%% Training (Routine step 1)         
-opt_train = optimization.OptimizationProblem(trainable_variables_train, loss_train, val_metric)
+#%% Training (Routine step 1)
+if coarse_training == 0:       
+    opt_train = optimization.OptimizationProblem(trainable_variables_train, loss_train, val_metric)
 
-num_epochs_Adam_train = 500 #500
-num_epochs_BFGS_train = 500 #1000
+    num_epochs_Adam_train = 500 #500
+    num_epochs_BFGS_train = 500 #1000
 
-# Ho provato a fare Adam con riduzione del learning rate (si potrebbe provare una policy tipo reduce on plateau) + BFGS: risultato migliore è err generalizzazione circa 1e-7
-print('training (Adam)...')
-init_adam_time = time.time()
-opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-2))
-end_adam_time = time.time()
+    # Ho provato a fare Adam con riduzione del learning rate (si potrebbe provare una policy tipo reduce on plateau) + BFGS: risultato migliore è err generalizzazione circa 1e-7
+    print('training (Adam)...')
+    init_adam_time = time.time()
+    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-2))
+    end_adam_time = time.time()
 
-print('training (Adam)...')
-init_adam_time = time.time()
-opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=5e-3))
-end_adam_time = time.time()
+    print('training (Adam)...')
+    init_adam_time = time.time()
+    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=5e-3))
+    end_adam_time = time.time()
 
-print('training (Adam)...')
-init_adam_time = time.time()
-opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-3))
-end_adam_time = time.time()
+    print('training (Adam)...')
+    init_adam_time = time.time()
+    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-3))
+    end_adam_time = time.time()
 
-print('training (BFGS)...')
-init_bfgs_time = time.time()
-opt_train.optimize_BFGS(num_epochs_BFGS_train)
-end_bfgs_time = time.time()
+    print('training (BFGS)...')
+    init_bfgs_time = time.time()
+    opt_train.optimize_BFGS(num_epochs_BFGS_train)
+    end_bfgs_time = time.time()
 
-train_times = [end_adam_time - init_adam_time, end_bfgs_time - init_bfgs_time]
+    train_times = [end_adam_time - init_adam_time, end_bfgs_time - init_bfgs_time]
+
+
+#%% Training (Routine step 1) 
+if coarse_training == 1:        
+    opt_train = optimization.OptimizationProblem(trainable_variables_train, loss_train_coarse, val_metric)
+
+    num_epochs_Adam_train = 5 #500
+    num_epochs_BFGS_train = 5 #1000
+
+    # Ho provato a fare Adam con riduzione del learning rate (si potrebbe provare una policy tipo reduce on plateau) + BFGS: risultato migliore è err generalizzazione circa 1e-7
+    print('training (Adam)...')
+    init_adam_time = time.time()
+    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-2))
+    end_adam_time = time.time()
+
+    print('training (Adam)...')
+    init_adam_time = time.time()
+    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=5e-3))
+    end_adam_time = time.time()
+
+    print('training (Adam)...')
+    init_adam_time = time.time()
+    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-3))
+    end_adam_time = time.time()
+
+    print('training (BFGS)...')
+    init_bfgs_time = time.time()
+    opt_train.optimize_BFGS(num_epochs_BFGS_train)
+    end_bfgs_time = time.time()
+
+    train_times = [end_adam_time - init_adam_time, end_bfgs_time - init_bfgs_time]
 
 #%% Saving the rhs-NN (NNdyn) 
 #NNdyn.save(folder + 'NNdyn')
 
-#%% Testing
-variables = evolve_dynamics(dataset_testg, x0_test)
-variables = variables[1,:,:]
+#%% Summary of training/testing results
+if coarse_training == 0:
+    print('Training loss: ', loss_train().numpy())
+if coarse_training == 1:
+    print('Training loss: ', loss_train_coarse().numpy())
+print('Training error: ', val_train().numpy())
+print('Testing error: ', loss_valid().numpy())
+print('Extended testing error: ', loss_valid_ext().numpy())
+
+#%% Random plots of testing results
+if coarse_training == 0:
+    variables = evolve_dynamics(dataset_testg, x0_test)
+    num_plot  = 6
+    rand_vec  = np.random.randint(0,50,num_plot)
+    tt        = t_num[0,:]
+
+    fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
+
+    for i in range(2):
+        for j in range(int(num_plot/2)):
+            ind = rand_vec[2*i+j]
+            axs[i,j].plot(tt, testing_target[ind,:,0], 'r-', label='v true')
+            axs[i,j].plot(tt, 5/2*variables[ind,:,0], 'k--', label='v pred')
+            axs[i,j].plot(tt, testing_target[ind,:,1], 'g-', label='w true')
+            axs[i,j].plot(tt, 5/2*variables[ind,:,1], 'b--', label='w pred')
+            axs[i,j].set_xlabel('Time')
+            axs[i,j].set_ylabel('State')
+            axs[i,j].set_title('NeuralODE: Traiettoria vera vs predetta')
+            axs[i,j].grid(True)
+            axs[i,j].legend(loc='upper right')
+
+    plt.savefig(folder + 'test.png')
+
+#%% Random plots of testing results
+if coarse_training == 1:
+    variables = evolve_dynamics(dataset_coarse, x0_test)
+    num_plot  = 4
+    rand_vec  = np.random.randint(0,50,num_plot)
+    tt        = t_num[0,:]
+    indexes   = dataset_coarse['coarse_indexes']
+
+    fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
+
+    for i in range(2):
+        for j in range(int(num_plot/2)):
+            ind = rand_vec[2*i+j]
+            axs[i,j].plot(tt[indexes], testing_target[ind,indexes,0], 'r-', label='v true (coarse)')
+            #axs[i,j].plot(tt, testing_target[ind,:,0], 'y--', label='v true')
+            axs[i,j].plot(tt, 5/2*variables[ind,:,0], 'k--', label='v pred')
+            axs[i,j].plot(tt[indexes], testing_target[ind,indexes,1], 'g-', label='w true (coarse)')
+            #axs[i,j].plot(tt, testing_target[ind,:,1], 'y-', label='w true')
+            axs[i,j].plot(tt, 5/2*variables[ind,:,1], 'b--', label='w pred')
+            axs[i,j].set_xlabel('Time')
+            axs[i,j].set_ylabel('State')
+            axs[i,j].set_title('NeuralODE: Traiettoria vera vs predetta')
+            axs[i,j].grid(True)
+            axs[i,j].legend(loc='upper right')
+
+    plt.savefig(folder + 'test.png')
+
+#%% Random plots of extended testing results
+variables = evolve_dynamics(dataset_test_ext, x0_test_ext)
+num_plot  = 4
+rand_vec  = np.random.randint(0,50,num_plot)
 tt        = t_num[0,:]
-target    = testing_target[1,:,:]
+tt_ext    = t_num_ext[0,:]
+tt_comp   = np.setdiff1d(tt_ext, tt)
 
-plt.plot(tt,5/2* variables[:,0],    'k--', label='v pred')
-plt.plot(tt, target[:,0], 'r-', label='v true')
-plt.plot(tt, 5/2*variables[:,1],    'b--', label='w pred')
-plt.plot(tt, target[:,1], 'g-', label='w true')
-plt.xlabel('Time')
-plt.ylabel('State')
-plt.title('NeuralODE: Traiettoria vera vs predetta')
-plt.legend()
-plt.grid(True)
-plt.savefig(folder + 'test.png')
+fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
 
+for i in range(2):
+    for j in range(int(num_plot/2)):
+        ind = rand_vec[2*i+j]
+        axs[i,j].plot(tt, testing_target_ext[ind,:len(tt),0], 'r-', label='v true')
+        axs[i,j].plot(tt_comp, testing_target_ext[ind,len(tt):,0], 'y-', label='v true ext', linewidth=2)
+        axs[i,j].plot(tt_ext, 5/2*variables[ind,:,0], 'k--', label='v pred')
+        axs[i,j].plot(tt, testing_target_ext[ind,:len(tt),1], 'g-', label='w true')
+        axs[i,j].plot(tt_comp, testing_target_ext[ind,len(tt):,1], 'y-', label='w true ext', linewidth=2)
+        axs[i,j].plot(tt_ext, 5/2*variables[ind,:,1], 'b--', label='w pred')
+        axs[i,j].set_xlabel('Time')
+        axs[i,j].set_ylabel('State')
+        axs[i,j].set_title('NeuralODE: Traiettoria vera vs predetta')
+        axs[i,j].grid(True)
+        axs[i,j].legend(loc='upper right')
+
+plt.savefig(folder + 'test_extended.png')
 #%% Saving results
 if os.path.exists(folder_train) == False:
     os.mkdir(folder_train)

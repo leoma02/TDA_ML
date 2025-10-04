@@ -221,3 +221,54 @@ def traj_computation(epsilon,a,b,Iext,theta,T,dt,v0,w0,plot=1):
     plt.show()
 
   return x
+
+
+def generate_dataset(NT,normalization,theta,T,dt):
+    
+    trajectories = []
+    inputs       = []
+    x0           = []
+    a_vec        = []
+    b_vec        = []
+    eps_vec      = []
+
+    eps_min = normalization['input_parameters']['epsilon']['min']
+    eps_max = normalization['input_parameters']['epsilon']['max']
+    a_min   = normalization['input_parameters']['a']['min']
+    a_max   = normalization['input_parameters']['a']['max']
+    b_min   = normalization['input_parameters']['b']['min']
+    b_max   = normalization['input_parameters']['b']['max']
+    u_min   = normalization['input_signals']['I_ext']['min']
+    u_max   = normalization['input_signals']['I_ext']['max']
+
+    for i in range(1,NT+1):
+        epsilon = np.random.uniform(eps_min, eps_max)
+        a       = np.random.uniform(a_min, a_max)
+        b       = np.random.uniform(b_min, b_max)
+        Iext    = np.random.uniform(u_min, u_max)
+        v0      = 1.5
+        w0      = v0
+        x_min = np.array([normalization['output_fields']['v']['min'], normalization['output_fields']['w']['min']])
+        x_max = np.array([normalization['output_fields']['v']['max'], normalization['output_fields']['w']['max']])
+
+        x_temp = traj_computation(epsilon,a,b,Iext,theta,T,dt,v0,w0,0)
+        trajectories.append(x_temp)
+        x0.append( (2.0*x_temp[0]-x_min-x_max)/(x_max-x_min) )
+
+        u        = np.full((len(x_temp), 1), (2.0*Iext-u_min-u_max)/(u_max-u_min), dtype=np.float64)
+        a_temp   = np.full((len(x_temp), 1), (2.0*a-a_min-a_max)/(a_max-a_min), dtype=np.float64)
+        b_temp   = np.full((len(x_temp), 1), (2.0*b-b_min-b_max)/(b_max-b_min), dtype=np.float64)
+        eps_temp = np.full((len(x_temp), 1), (2.0*epsilon-eps_min-eps_max)/(eps_max-eps_min), dtype=np.float64)
+        a_vec.append(a_temp)
+        b_vec.append(b_temp)
+        eps_vec.append(eps_temp)
+        inputs.append(u)
+
+    x0     = np.stack(x0, axis=0).astype(np.float64)
+    u      = np.stack(inputs, axis=0).astype(np.float64)
+    target = np.stack(trajectories, axis=0).astype(np.float64)
+    a      = np.stack(a_vec, axis=0).astype(np.float64)
+    b      = np.stack(b_vec, axis=0).astype(np.float64)
+    eps    = np.stack(eps_vec, axis=0).astype(np.float64)
+
+    return x0, u, target, a, b, eps
