@@ -10,6 +10,7 @@ import time
 import utils
 import optimization
 import shutil
+import TDA_utils
 
 # Set the color cycle to the "Accent" palette
 colors = plt.cm.tab20c.colors
@@ -26,8 +27,12 @@ class ClipConstraint(tf.keras.constraints.Constraint):
         return tf.clip_by_value(w, self.min_value, self.max_value)
 
 save_train      = 1    # save training
-coarse_training = 1    # enable/disable training with coarse dataset
-#%% Model parameters
+coarse_training = 0    # enable/disable training with coarse dataset
+#%% 
+####################
+# MODEL PARAMETERS #
+####################
+
 t_max             = 100                                      # time horizon
 t_max_ext         = 200                                      # extended time horizon
 dt                = 1                                        # real time step
@@ -57,7 +62,11 @@ b_max             = 1.0                                      # maximum value of 
 epsilon_min       = 0.0                                      # minimum value of epsilon
 epsilon_max       = 1.2                                      # maximum value of epsilon
 
-#%% Generating folders
+#%%
+######################
+# GENERATING FOLDERS #
+######################
+
 folder = 'results' + str(neurons) + '_hlayers_' + str(layers) + '/'
 
 shutil.rmtree(folder)
@@ -66,7 +75,11 @@ if os.path.exists(folder) == False:
     os.mkdir(folder)
 folder_train = folder + 'train/'
 
-#%% Define problem and normalization
+#%%
+######################
+# PROBLEM DEFINITION #
+######################
+
 problem = {
     "input_parameters": [
         { "name": "a" },
@@ -103,7 +116,11 @@ normalization = {
     }
 }
 
-#%% Importing/Generating dataset
+#%%
+#####################
+# IMPORTING DATASET #
+#####################
+
 # Parameters definition
 theta     = 1
 NTrain    = 50
@@ -119,7 +136,11 @@ x0_test, u_test, testing_target, a_test, b_test, eps_test = utils.generate_datas
 # Generating extended testing dataset
 x0_test_ext, u_test_ext, testing_target_ext, a_test_ext, b_test_ext, eps_test_ext = utils.generate_dataset(NTest_ext, normalization, theta, t_max_ext, dt_num)
 
-#%% Dataset parameters
+#%%
+######################
+# DATASET PARAMETERS #
+######################
+
 n_size                 = x0_train.shape[0]
 n_size_testg           = x0_test.shape[0]
 training_var_numpy     = u_train
@@ -168,6 +189,10 @@ dataset_coarse = {
         'frac'          : int(dt/dt_num)
 }
 #%%
+###################
+# PROCESS DATASET #
+###################
+
 np.random.seed(0)
 tf.random.set_seed(0)
 
@@ -179,7 +204,11 @@ utils.process_dataset_epi_real(dataset_coarse, problem, normalization, dt = None
 print(dataset_train["inp_signals"].shape)
 print(dataset_train["out_fields"].shape)
 
-#%% Define model
+#%%
+##############################
+# NEURAL OPERATOR DEFINITION #
+##############################
+
 input_shape = (num_latent_states + len(problem['input_parameters']) + len(problem['input_signals']),)
 
 NNdyn = tf.keras.Sequential([
@@ -189,7 +218,11 @@ NNdyn = tf.keras.Sequential([
         ])
 NNdyn.summary()
 
-#%% Defining the forward evolution model for the latent transmission rate
+#%%
+###################
+# EVOLUTION MODEL #
+###################
+
 def evolve_dynamics(dataset, initial_lat_state): #initial_state (n_samples x n_latent_state)
     
     lat_state = initial_lat_state
@@ -206,7 +239,11 @@ def evolve_dynamics(dataset, initial_lat_state): #initial_state (n_samples x n_l
 
     return tf.transpose(lat_state_history.stack(), perm=(1,0,2))
 
-#%% Loss functions
+#%%
+##################
+# LOSS FUNCTIONS #
+##################
+
 def loss_exp_beta(dataset, lat_states):
     state = evolve_dynamics(dataset, lat_states)
     MSE = tf.reduce_mean(tf.square((state) - dataset['out_fields'])) #siccome è tutto normalizzato possiamo considerareMSE assoluto
@@ -222,18 +259,51 @@ def loss_exp_beta_coarse(dataset, lat_states):
     MSE = tf.reduce_mean(tf.square(state_sel - out_sel))
     return MSE
 
+def loss_exp_beta_matrixnorm(dataset, lat_states):
+    state = evolve_dynamics(dataset, lat_states)
+    MSE = tf.reduce_mean(tf.square((state) - dataset['out_fields'])) #siccome è tutto normalizzato possiamo considerareMSE assoluto
+
+    '''
+    M1 = TDA_utils.extract_distance_matrix(state)
+    M2 = TDA_utils.extract_distance_matrix(dataset['out_fields'])
+
+    frobenius_norm = tf.norm(M1 - M2, ord='fro', axis=(1, 2)) / (M1.shape[1] * M1.shape[2])
+    matrix_loss    = tf.reduce_mean(frobenius_norm)
+    '''
+
+    matrix_loss = 0.0
+    for i in range(state.shape[0]):
+        for j in range(i+1):
+            diff = state[:,i,:] - state[:,j,:]
+            matrix_loss += tf.reduce_mean(tf.reduce_sum(tf.square(diff),axis=-1))
+            matrix_loss /= state.shape[0]**2
+
+    return MSE + matrix_loss
+
 def weights_reg(NN):
     return sum([tf.reduce_mean(tf.square(lay.kernel)) for lay in NN.layers])/len(NN.layers)
 
-#%% Loss weights
+#%%
+################
+# LOSS WEIGHTS #
+################
+
 nu_loss_train = 1    #3e-2 # weight MSE metric
 alpha_reg     = 1e-8       # regularization of trainable variables
 
-#%% Training
+#%%
+######################
+# TRAINING FUNCTIONS #
+######################
+
 trainable_variables_train = NNdyn.variables
 
 def loss_train():
     l = nu_loss_train * loss_exp_beta(dataset_train, x0_train) + alpha_reg * weights_reg(NNdyn)
+    return l
+
+def loss_train_matrixnorm():
+    l = nu_loss_train * loss_exp_beta_matrixnorm(dataset_train, x0_train) + alpha_reg * weights_reg(NNdyn)
     return l
 
 def loss_valid():
@@ -254,15 +324,19 @@ def loss_train_coarse():
 
 val_metric = loss_valid
 
-#%% Training (Routine step 1)
-if coarse_training == 0:       
-    opt_train = optimization.OptimizationProblem(trainable_variables_train, loss_train, val_metric)
+#%%
+#######################
+# NON COARSE TRAINING #
+#######################
 
-    num_epochs_Adam_train = 500 #500
-    num_epochs_BFGS_train = 500 #1000
+if coarse_training == 0:
+    losses_dict = {'Standard': loss_train, 'MatrixNorm': loss_train_matrixnorm} 
+    opt_train   = optimization.OptimizationProblem(trainable_variables_train, losses_dict, val_metric)
 
-    # Ho provato a fare Adam con riduzione del learning rate (si potrebbe provare una policy tipo reduce on plateau) + BFGS: risultato migliore è err generalizzazione circa 1e-7
-    print('training (Adam)...')
+    num_epochs_Adam_train        = 500 #500
+    num_epochs_BFGS_train        = 1000 #1000
+    num_epochs_BFGS_matrix_train = 500
+
     init_adam_time = time.time()
     opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-2))
     end_adam_time = time.time()
@@ -282,17 +356,68 @@ if coarse_training == 0:
     opt_train.optimize_BFGS(num_epochs_BFGS_train)
     end_bfgs_time = time.time()
 
+    variables1 = evolve_dynamics(dataset_testg, x0_test)
+    num_plot  = 6
+    rand_vec  = np.random.randint(0,NTest,num_plot)
+    tt        = t_num[0,:]
+
+    fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
+
+    for i in range(2):
+        for j in range(int(num_plot/2)):
+            ind = rand_vec[2*i+j]
+            axs[i,j].plot(tt, testing_target[ind,:,0], 'r-', label='v true')
+            axs[i,j].plot(tt, 5/2*variables1[ind,:,0], 'k--', label='v pred')
+            axs[i,j].plot(tt, testing_target[ind,:,1], 'g-', label='w true')
+            axs[i,j].plot(tt, 5/2*variables1[ind,:,1], 'b--', label='w pred')
+            axs[i,j].set_xlabel('Time')
+            axs[i,j].set_ylabel('State')
+            axs[i,j].set_title('NeuralODE: Traiettoria vera vs predetta')
+            axs[i,j].grid(True)
+            axs[i,j].legend(loc='upper right')
+
+    plt.savefig(folder + 'test_prematrix.png')
+
+    opt_train.set_loss_train('MatrixNorm')
+
+    print('training (BFGS)...')
+    init_bfgs_time = time.time()
+    opt_train.optimize_BFGS(num_epochs_BFGS_matrix_train)
+    end_bfgs_time = time.time()
+
+    variables2 = evolve_dynamics(dataset_testg, x0_test)
+    fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
+
+    for i in range(2):
+        for j in range(int(num_plot/2)):
+            ind = rand_vec[2*i+j]
+            axs[i,j].plot(tt, testing_target[ind,:,0], 'r-', label='v true')
+            axs[i,j].plot(tt, 5/2*variables2[ind,:,0], 'k--', label='v pred')
+            axs[i,j].plot(tt, testing_target[ind,:,1], 'g-', label='w true')
+            axs[i,j].plot(tt, 5/2*variables2[ind,:,1], 'b--', label='w pred')
+            axs[i,j].set_xlabel('Time')
+            axs[i,j].set_ylabel('State')
+            axs[i,j].set_title('NeuralODE: Traiettoria vera vs predetta')
+            axs[i,j].grid(True)
+            axs[i,j].legend(loc='upper right')
+
+    plt.savefig(folder + 'test_postmatrix.png')
+
     train_times = [end_adam_time - init_adam_time, end_bfgs_time - init_bfgs_time]
 
 
-#%% Training (Routine step 1) 
+#%%
+###################
+# COARSE TRAINING #
+###################
+
 if coarse_training == 1:        
     opt_train = optimization.OptimizationProblem(trainable_variables_train, loss_train_coarse, val_metric)
 
-    num_epochs_Adam_train = 5 #500
-    num_epochs_BFGS_train = 5 #1000
+    num_epochs_Adam_train        = 200 #500
+    num_epochs_BFGS_train        = 200 #1000
+    num_epochs_BFGS_matrix_train = 100
 
-    # Ho provato a fare Adam con riduzione del learning rate (si potrebbe provare una policy tipo reduce on plateau) + BFGS: risultato migliore è err generalizzazione circa 1e-7
     print('training (Adam)...')
     init_adam_time = time.time()
     opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-2))
@@ -315,10 +440,18 @@ if coarse_training == 1:
 
     train_times = [end_adam_time - init_adam_time, end_bfgs_time - init_bfgs_time]
 
-#%% Saving the rhs-NN (NNdyn) 
+#%%
+################
+# MODEL SAVING #
+################
+
 #NNdyn.save(folder + 'NNdyn')
 
-#%% Summary of training/testing results
+#%%
+###################
+# RESULTS SUMMARY #
+###################
+
 if coarse_training == 0:
     print('Training loss: ', loss_train().numpy())
 if coarse_training == 1:
@@ -327,7 +460,11 @@ print('Training error: ', val_train().numpy())
 print('Testing error: ', loss_valid().numpy())
 print('Extended testing error: ', loss_valid_ext().numpy())
 
-#%% Random plots of testing results
+#%%
+############################
+# NON COARSE RESULTS PLOTS #
+############################
+
 if coarse_training == 0:
     variables = evolve_dynamics(dataset_testg, x0_test)
     num_plot  = 6
@@ -351,7 +488,11 @@ if coarse_training == 0:
 
     plt.savefig(folder + 'test.png')
 
-#%% Random plots of testing results
+#%%
+########################
+# COARSE RESULTS PLOTS #
+########################
+
 if coarse_training == 1:
     variables = evolve_dynamics(dataset_coarse, x0_test)
     num_plot  = 4
@@ -378,7 +519,11 @@ if coarse_training == 1:
 
     plt.savefig(folder + 'test.png')
 
-#%% Random plots of extended testing results
+#%%
+##########################
+# EXTENDED RESULTS PLOTS #
+##########################
+
 variables = evolve_dynamics(dataset_test_ext, x0_test_ext)
 num_plot  = 4
 rand_vec  = np.random.randint(0,50,num_plot)

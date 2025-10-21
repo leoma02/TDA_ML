@@ -4,53 +4,71 @@ import scipy.optimize as sopt
 
 class OptimizationProblem():
     """
-    Class representing an optimization problem.
+    Class representing an optimization problem with switchable loss functions.
     """
     def __init__(self, variables, loss_train, loss_valid):
         """
         Parameters
         ----------
-        variables
-            List of trainable variables.
-        loss_train
-            Callable returning the loss function on the training dataset.
-        loss_valid
-            Callable returning the loss function on the validation dataset.
+        variables : list of tf.Variable
+        loss_train : callable or dict[str, callable]
+            Training loss function(s). Can be a single callable or a dict of callables.
+        loss_valid : callable
+            Validation loss function.
         """
         self.variables = variables if isinstance(variables, (list, tuple)) else [variables]
-        self.loss_train = loss_train
+
+        # Support both single or multiple training losses
+        if isinstance(loss_train, dict):
+            self.loss_train_dict = loss_train
+            self.current_loss_key = list(loss_train.keys())[0]  # default: first one
+            self.loss_train = loss_train[self.current_loss_key]
+        else:
+            self.loss_train_dict = {'default': loss_train}
+            self.current_loss_key = 'default'
+            self.loss_train = loss_train
+
         self.loss_valid = loss_valid
         self.stitcher = VariablesStitcher(self.variables)
 
         self.compile()
 
         self.iteration = 0
-        self.iterations_history = list()
-        self.loss_train_history = list()
-        self.loss_valid_history = list()
+        self.iterations_history = []
+        self.loss_train_history = []
+        self.loss_valid_history = []
         self.iteration_callback()
+
+    # Dynamic loss switching
+    def set_loss_train(self, name):
+        """
+        Changes the active loss function.
+        """
+        if name not in self.loss_train_dict:
+            raise ValueError(f"Loss '{name}' not found. Available choices: {list(self.loss_train_dict.keys())}")
+        self.loss_train = self.loss_train_dict[name]
+        self.current_loss_key = name
+        self.compile()  # Re-compile to update losses
+        print(f"--> Training loss switched to '{name}'")
 
     def compile(self):
         self.ag_train_loss = tf.function(self.loss_train)
         self.ag_train_grad = tf.function(self.compute_gradient)
-        self.ag_train_loss_grad = tf.function(lambda params: self.get_gradient_and_loss(params_1d = params))
+        self.ag_train_loss_grad = tf.function(lambda params: self.get_gradient_and_loss(params_1d=params))
         self.ag_valid_loss = tf.function(self.loss_valid)
 
-        print('Tracing functions with autograph...')
+        print(f'Tracing functions (loss = "{self.current_loss_key}")...')
         self.ag_train_loss()
         self.ag_train_grad()
-        #self.ag_train_loss_grad(self.stitcher.stitch(self.variables).numpy())
         self.ag_train_loss_grad(self.stitcher.stitch(self.variables))
         self.ag_valid_loss()
         print('Tracing completed.')
 
     def get_gradient_and_loss(self, params_1d):
-        # Applica i nuovi parametri alle variabili
+        # Apply new parameters to variables
         self.stitcher.update_variables(params_1d)
 
-        # Rimuovi watch_accessed_variables=False e tape.watch
         with tf.GradientTape() as tape:
-            # tf.Variable usate in loss_train vengono tracciate automaticamente
             loss_value = self.loss_train()
 
         grads = tape.gradient(
@@ -59,7 +77,6 @@ class OptimizationProblem():
             unconnected_gradients=tf.UnconnectedGradients.ZERO
         )
         grads_1d = self.stitcher.stitch(grads)
-        # Se vuoi restituire anche il loss, fallo qui:
         return loss_value, grads_1d
         
     def ag_train_loss_grad_numpy(self, params_1d):
@@ -117,6 +134,10 @@ class OptimizationProblem():
                 tol = 1e-100,
                 options = options,
                 callback = callback)
+        
+        print("Optimization message:", result.message)
+        print("Optimization success:", result.success)
+        print("Final iterations:", result.nit)
     
     def optimize_basinhopping(self, num_epochs):
         options = {'maxiter': num_epochs, 'gtol': 1e-100}
