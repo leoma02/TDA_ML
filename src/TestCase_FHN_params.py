@@ -259,15 +259,9 @@ def loss_MSE_coarse(dataset, lat_states):
     MSE = tf.reduce_mean(tf.square(state_sel - out_sel))
     return MSE
 
-def loss_matrixnorm(dataset, lat_states):
+def loss_MSE_matrixnorm(dataset, lat_states):
     state = evolve_dynamics(dataset, lat_states)
-    '''
-    M1 = TDA_utils.extract_distance_matrix(state)
-    M2 = TDA_utils.extract_distance_matrix(dataset['out_fields'])
-
-    frobenius_norm = tf.norm(M1 - M2, ord='fro', axis=(1, 2)) / (M1.shape[1] * M1.shape[2])
-    matrix_loss    = tf.reduce_mean(frobenius_norm)
-    '''
+    MSE = tf.reduce_mean(tf.square((state) - dataset['out_fields']))
 
     matrix_loss = tf.zeros(state.shape[0], dtype=tf.float64)
     for i in range(0,state.shape[1],5):
@@ -279,7 +273,7 @@ def loss_matrixnorm(dataset, lat_states):
             matrix_loss += diff
             #/(state.shape[1]/5)
 
-    return tf.reduce_mean(matrix_loss)
+    return MSE + tf.reduce_mean(matrix_loss)
 
 def weights_reg(NN):
     return sum([tf.reduce_mean(tf.square(lay.kernel)) for lay in NN.layers])/len(NN.layers)
@@ -304,7 +298,7 @@ def loss_train():
     return l
 
 def loss_train_matrixnorm():
-    l = nu_loss_train * (loss_matrixnorm(dataset_train, x0_train) + loss_MSE(dataset_train, x0_train)) + alpha_reg * weights_reg(NNdyn)
+    l = nu_loss_train * loss_MSE_matrixnorm(dataset_train, x0_train) + alpha_reg * weights_reg(NNdyn)
     return l
 
 def loss_valid():
