@@ -42,7 +42,7 @@ dt_base           = 1                                        # rescaling factor
 variance_init     = 0.0001                                   # initial variance of weights
 t                 = np.arange(0, t_max+dt, dt)[None,:]       # time values
 t_ext             = np.arange(0, t_max_ext+dt, dt)[None,:]   # extended time values
-dt_num            = 0.1                                      # numerical time step
+dt_num            = 1                                      # numerical time step
 dt_ratio          = 50                                       # time step for coarse training data defined as dt_coarse/dt_num (for now, only multiples of dt_num)
 t_num             = np.arange(0, t_max, dt_num)[None, :]     # numerical time values
 t_num_ext         = np.arange(0, t_max_ext, dt_num)[None, :] # numerical time values
@@ -244,12 +244,12 @@ def evolve_dynamics(dataset, initial_lat_state): #initial_state (n_samples x n_l
 # LOSS FUNCTIONS #
 ##################
 
-def loss_exp_beta(dataset, lat_states):
+def loss_MSE(dataset, lat_states):
     state = evolve_dynamics(dataset, lat_states)
     MSE = tf.reduce_mean(tf.square((state) - dataset['out_fields'])) #siccome è tutto normalizzato possiamo considerareMSE assoluto
     return MSE
 
-def loss_exp_beta_coarse(dataset, lat_states):
+def loss_MSE_coarse(dataset, lat_states):
     state   = evolve_dynamics(dataset, lat_states)
     indexes = tf.convert_to_tensor(dataset['coarse_indexes'], dtype=tf.int32)
 
@@ -259,10 +259,8 @@ def loss_exp_beta_coarse(dataset, lat_states):
     MSE = tf.reduce_mean(tf.square(state_sel - out_sel))
     return MSE
 
-def loss_exp_beta_matrixnorm(dataset, lat_states):
+def loss_matrixnorm(dataset, lat_states):
     state = evolve_dynamics(dataset, lat_states)
-    MSE = tf.reduce_mean(tf.square((state) - dataset['out_fields'])) #siccome è tutto normalizzato possiamo considerareMSE assoluto
-
     '''
     M1 = TDA_utils.extract_distance_matrix(state)
     M2 = TDA_utils.extract_distance_matrix(dataset['out_fields'])
@@ -271,14 +269,17 @@ def loss_exp_beta_matrixnorm(dataset, lat_states):
     matrix_loss    = tf.reduce_mean(frobenius_norm)
     '''
 
-    matrix_loss = 0.0
-    for i in range(state.shape[0]):
-        for j in range(i+1):
-            diff = state[:,i,:] - state[:,j,:]
-            matrix_loss += tf.reduce_mean(tf.reduce_sum(tf.square(diff),axis=-1))
-            matrix_loss /= state.shape[0]**2
+    matrix_loss = tf.zeros(state.shape[0], dtype=tf.float64)
+    for i in range(0,state.shape[1],5):
+        for j in range(0,i+1,step=5):
+            #print("i:", i, "j:", j)
+            d1 = (state[:,i,0] - state[:,j,0])**2 + (state[:,i,1] - state[:,j,1])**2
+            d2 = (dataset['out_fields'][:,i,0] - dataset['out_fields'][:,j,0])**2 + (dataset['out_fields'][:,i,1] - dataset['out_fields'][:,j,1])**2
+            diff = (d1 - d2)**2
+            matrix_loss += diff
+            #/(state.shape[1]/5)
 
-    return MSE + matrix_loss
+    return tf.reduce_mean(matrix_loss)
 
 def weights_reg(NN):
     return sum([tf.reduce_mean(tf.square(lay.kernel)) for lay in NN.layers])/len(NN.layers)
@@ -299,27 +300,27 @@ alpha_reg     = 1e-8       # regularization of trainable variables
 trainable_variables_train = NNdyn.variables
 
 def loss_train():
-    l = nu_loss_train * loss_exp_beta(dataset_train, x0_train) + alpha_reg * weights_reg(NNdyn)
+    l = nu_loss_train * loss_MSE(dataset_train, x0_train) + alpha_reg * weights_reg(NNdyn)
     return l
 
 def loss_train_matrixnorm():
-    l = nu_loss_train * loss_exp_beta_matrixnorm(dataset_train, x0_train) + alpha_reg * weights_reg(NNdyn)
+    l = nu_loss_train * (loss_matrixnorm(dataset_train, x0_train) + loss_MSE(dataset_train, x0_train)) + alpha_reg * weights_reg(NNdyn)
     return l
 
 def loss_valid():
-    l = loss_exp_beta(dataset_testg, x0_test)
+    l = loss_MSE(dataset_testg, x0_test)
     return l
 
 def val_train():
-    l = loss_exp_beta(dataset_train, x0_train)
+    l = loss_MSE(dataset_train, x0_train)
     return l 
 
 def loss_valid_ext():
-    l = loss_exp_beta(dataset_test_ext, x0_test_ext)
+    l = loss_MSE(dataset_test_ext, x0_test_ext)
     return l
 
 def loss_train_coarse():
-    l = nu_loss_train * loss_exp_beta_coarse(dataset_coarse, x0_train) + alpha_reg * weights_reg(NNdyn)
+    l = nu_loss_train * loss_MSE_coarse(dataset_coarse, x0_train) + alpha_reg * weights_reg(NNdyn)
     return l
 
 val_metric = loss_valid
@@ -555,9 +556,9 @@ if os.path.exists(folder_train) == False:
 
 if save_train:
     beta_train = evolve_dynamics(dataset_train, x0_train)
-    l_train    = loss_exp_beta(dataset_train, x0_train)
+    l_train    = loss_MSE(dataset_train, x0_train)
     beta_testg = evolve_dynamics(dataset_testg, x0_test)
-    l_testg    = loss_exp_beta(dataset_testg, x0_test)
+    l_testg    = loss_MSE(dataset_testg, x0_test)
     
     np.savetxt(folder_train + 'testg_error.txt', np.array(l_testg).reshape((1,1)))
     np.savetxt(folder_train + 'train_error.txt', np.array(l_train).reshape((1,1)))
