@@ -123,7 +123,7 @@ normalization = {
 
 # Parameters definition
 theta     = 1
-NTrain    = 50
+NTrain    = 2
 NTest     = 50
 NTest_ext = 50 
 
@@ -328,10 +328,11 @@ if coarse_training == 0:
     losses_dict = {'Standard': loss_train, 'MatrixNorm': loss_train_matrixnorm} 
     opt_train   = optimization.OptimizationProblem(trainable_variables_train, losses_dict, val_metric)
 
-    num_epochs_Adam_train        = 500 #500
+    num_epochs_Adam_train        = 1500 #500
     num_epochs_BFGS_train        = 1000 #1000
-    num_epochs_BFGS_matrix_train = 500
+    num_epochs_BFGS_matrix_train = 2000
 
+    print('training (Adam)...')
     init_adam_time = time.time()
     opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-2))
     end_adam_time = time.time()
@@ -349,7 +350,7 @@ if coarse_training == 0:
     print('training (BFGS)...')
     init_bfgs_time = time.time()
     opt_train.optimize_BFGS(num_epochs_BFGS_train)
-    end_bfgs_time = time.time()
+    end_bfgs_time = time.time()    
 
     variables1 = evolve_dynamics(dataset_testg, x0_test)
     num_plot  = 6
@@ -372,13 +373,13 @@ if coarse_training == 0:
             axs[i,j].legend(loc='upper right')
 
     plt.savefig(folder + 'test_prematrix.png')
-
+'''
     opt_train.set_loss_train('MatrixNorm')
 
     print('training (BFGS)...')
-    init_bfgs_time = time.time()
+    init_adam_time = time.time()
     opt_train.optimize_BFGS(num_epochs_BFGS_matrix_train)
-    end_bfgs_time = time.time()
+    end_adam_time = time.time()
 
     variables2 = evolve_dynamics(dataset_testg, x0_test)
     fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
@@ -399,7 +400,7 @@ if coarse_training == 0:
     plt.savefig(folder + 'test_postmatrix.png')
 
     train_times = [end_adam_time - init_adam_time, end_bfgs_time - init_bfgs_time]
-
+'''
 
 #%%
 ###################
