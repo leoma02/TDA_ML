@@ -123,7 +123,7 @@ normalization = {
 
 # Parameters definition
 theta     = 1
-NTrain    = 2
+NTrain    = 50 
 NTest     = 50
 NTest_ext = 50 
 
@@ -132,6 +132,11 @@ x0_train, u_train, training_target, a_train, b_train, eps_train = utils.generate
 
 # Generating testing dataset
 x0_test, u_test, testing_target, a_test, b_test, eps_test = utils.generate_dataset(NTest, normalization, theta, t_max, dt_num)
+testing_target = training_target
+x0_test = x0_train
+a_test = a_train
+b_test = b_train
+eps_test = eps_train
 
 # Generating extended testing dataset
 x0_test_ext, u_test_ext, testing_target_ext, a_test_ext, b_test_ext, eps_test_ext = utils.generate_dataset(NTest_ext, normalization, theta, t_max_ext, dt_num)
@@ -203,6 +208,7 @@ utils.process_dataset_epi_real(dataset_test_ext, problem, normalization, dt = No
 utils.process_dataset_epi_real(dataset_coarse, problem, normalization, dt = None, num_points_subsample = None)
 print(dataset_train["inp_signals"].shape)
 print(dataset_train["out_fields"].shape)
+dataset_testg = dataset_train
 
 #%%
 ##############################
@@ -273,7 +279,22 @@ def loss_MSE_matrixnorm(dataset, lat_states):
             matrix_loss += diff
             #/(state.shape[1]/5)
 
-    return MSE + tf.reduce_mean(matrix_loss)
+    return MSE + 1e-4 * tf.reduce_mean(matrix_loss)
+
+def loss_matrixnorm(dataset, lat_states):
+    state = evolve_dynamics(dataset, lat_states)
+    
+    matrix_loss = tf.zeros(state.shape[0], dtype=tf.float64)
+    for i in range(0,state.shape[1],5):
+        for j in range(0,i+1,step=5):
+            #print("i:", i, "j:", j)
+            d1 = (state[:,i,0] - state[:,j,0])**2 + (state[:,i,1] - state[:,j,1])**2
+            d2 = (dataset['out_fields'][:,i,0] - dataset['out_fields'][:,j,0])**2 + (dataset['out_fields'][:,i,1] - dataset['out_fields'][:,j,1])**2
+            diff = (d1 - d2)**2
+            matrix_loss += diff
+            #/(state.shape[1]/5)
+
+    return tf.reduce_mean(matrix_loss)
 
 def weights_reg(NN):
     return sum([tf.reduce_mean(tf.square(lay.kernel)) for lay in NN.layers])/len(NN.layers)
@@ -284,7 +305,7 @@ def weights_reg(NN):
 ################
 
 nu_loss_train = 1    #3e-2 # weight MSE metric
-alpha_reg     = 1e-8       # regularization of trainable variables
+alpha_reg     = 0#1e-8       # regularization of trainable variables
 
 #%%
 ######################
@@ -299,10 +320,12 @@ def loss_train():
 
 def loss_train_matrixnorm():
     l = nu_loss_train * loss_MSE_matrixnorm(dataset_train, x0_train) + alpha_reg * weights_reg(NNdyn)
+    #l = nu_loss_train * loss_matrixnorm(dataset_train, x0_train) + alpha_reg * weights_reg(NNdyn)
     return l
 
 def loss_valid():
-    l = loss_MSE(dataset_testg, x0_test)
+    #l = loss_MSE(dataset_testg, x0_test)
+    l = loss_MSE(dataset_train, x0_train) + alpha_reg * weights_reg(NNdyn)
     return l
 
 def val_train():
@@ -325,12 +348,12 @@ val_metric = loss_valid
 #######################
 
 if coarse_training == 0:
-    losses_dict = {'Standard': loss_train, 'MatrixNorm': loss_train_matrixnorm} 
+    losses_dict = {'Standard': loss_train_matrixnorm, 'MatrixNorm': loss_train_matrixnorm} 
     opt_train   = optimization.OptimizationProblem(trainable_variables_train, losses_dict, val_metric)
 
-    num_epochs_Adam_train        = 1500 #500
-    num_epochs_BFGS_train        = 1000 #1000
-    num_epochs_BFGS_matrix_train = 2000
+    num_epochs_Adam_train        = 2000 #500
+    num_epochs_BFGS_train        = 2000 #1000
+    num_epochs_BFGS_matrix_train = 20# 2000
 
     print('training (Adam)...')
     init_adam_time = time.time()
@@ -354,7 +377,8 @@ if coarse_training == 0:
 
     variables1 = evolve_dynamics(dataset_testg, x0_test)
     num_plot  = 6
-    rand_vec  = np.random.randint(0,NTest,num_plot)
+    #rand_vec  = np.random.randint(0,NTest,num_plot)
+    rand_vec  = np.random.randint(0,NTrain,num_plot)
     tt        = t_num[0,:]
 
     fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
@@ -462,9 +486,9 @@ print('Extended testing error: ', loss_valid_ext().numpy())
 ############################
 
 if coarse_training == 0:
-    variables = evolve_dynamics(dataset_testg, x0_test)
+    variables = evolve_dynamics(dataset_train, x0_train)#evolve_dynamics(dataset_testg, x0_test)
     num_plot  = 6
-    rand_vec  = np.random.randint(0,50,num_plot)
+    rand_vec  = np.array([0, 1, 2, 7, 8, 9])#np.random.randint(0,NTrain,num_plot)
     tt        = t_num[0,:]
 
     fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))

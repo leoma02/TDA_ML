@@ -225,6 +225,8 @@ def traj_computation(epsilon,a,b,Iext,theta,T,dt,v0,w0,plot=1):
 
 def generate_dataset(NT,normalization,theta,T,dt):
     
+    np.random.seed(14586468)
+
     trajectories = []
     inputs       = []
     x0           = []
