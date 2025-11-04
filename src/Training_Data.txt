@@ -1,0 +1,59 @@
+### Ntrain = 100 ###
+
+Pure MSE
+Adam = 2500
+BFGS = 2000
+MSE  = 1.984e-02
+
+
+MSE + MN (1e-5)
+Adam = 2500
+BFGS = 2000
+MSE  = 3.118e-02
+
+MSE + MN (5e-4)
+Adam = 2500
+BFGS = 2000
+MSE  = 3.070e-02
+
+
+MSE + MN (1e-4)
+Adam = 2500
+BFGS = 2000
+MSE  = 1.850e-02
+
+
+### NTrain = 500 ###
+
+Pure MSE
+Adam = 2500
+BFGS = 2000
+MSE  = 1.782e-02
+
+MSE + MN (1e-4)
+Adam = 2500
+BFGS = 2000
+MSE  = 1.676e-02
+
+Pure MSE
+Adam = 3000
+BFGS = 2000
+MSE  = 2.629e-02
+
+MSE + MN (1e-4)
+Adam = 3000
+BFGS = 2000
+MSE  = 2.119e-02
+
+
+### NTrain = 1000 ###
+
+Pure MSE
+Adam = 3000
+BFGS = 2000
+MSE  = 3.271e-02
+
+MSE + MN (1e-4)
+Adam = 3000
+BFGS = 2000
+MSE  = 2.611e-02
