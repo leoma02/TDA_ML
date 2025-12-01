@@ -223,9 +223,9 @@ def traj_computation(epsilon,a,b,Iext,theta,T,dt,v0,w0,plot=1):
   return x
 
 
-def generate_dataset(NT,normalization,theta,T,dt):
+def generate_dataset(NT,normalization,theta,T,dt,seed):
     
-    np.random.seed(14586468)
+    np.random.seed(seed)
 
     trajectories = []
     inputs       = []
@@ -274,3 +274,25 @@ def generate_dataset(NT,normalization,theta,T,dt):
     eps    = np.stack(eps_vec, axis=0).astype(np.float64)
 
     return x0, u, target, a, b, eps
+
+def check_limit_cycle(trajectory, percentage):
+	check_v = np.min(trajectory[:,0]) + percentage*(np.max(trajectory[:,0]) - np.min(trajectory[:,0]))
+	check_w = np.min(trajectory[:,1]) + percentage*(np.max(trajectory[:,1]) - np.min(trajectory[:,1]))
+
+	bool_v = trajectory[0,0] > check_v
+	bool_w = trajectory[0,1] > check_w
+	num_v   = 0
+	num_w   = 0
+
+	for i in range(trajectory.shape[0]):
+		if (trajectory[i,0] > check_v) != bool_v:
+			bool_v = not bool_v
+			num_v += 1
+		if (trajectory[i,1] > check_w) != bool_w:
+			bool_w = not bool_w
+			num_w += 1
+  
+	if num_v > 3 and num_w > 3:
+		return True
+	else:
+		return False

@@ -42,7 +42,7 @@ dt_base           = 1                                        # rescaling factor
 variance_init     = 0.0001                                   # initial variance of weights
 t                 = np.arange(0, t_max+dt, dt)[None,:]       # time values
 t_ext             = np.arange(0, t_max_ext+dt, dt)[None,:]   # extended time values
-dt_num            = 1                                      # numerical time step
+dt_num            = 1                                        # numerical time step
 dt_ratio          = 50                                       # time step for coarse training data defined as dt_coarse/dt_num (for now, only multiples of dt_num)
 t_num             = np.arange(0, t_max, dt_num)[None, :]     # numerical time values
 t_num_ext         = np.arange(0, t_max_ext, dt_num)[None, :] # numerical time values
@@ -53,14 +53,15 @@ v_min             = -2.5                                     # minimum value of 
 v_max             = 2.5                                      # maximum value of v
 w_min             = -2.5                                     # minimum value of w
 w_max             = 2.5                                      # maximum value of w
+upper_limit       = 0.8
 u_min             = 0.2                                      # minimum value of I_ext
-u_max             = 1.4                                      # maximum value of I_ext
+u_max             = upper_limit                              # maximum value of I_ext / 1.4
 a_min             = 0.1                                      # minimum value of a
-a_max             = 1.0                                      # maximum value of a
+a_max             = upper_limit                              # maximum value of a / 1.0
 b_min             = 0.1                                      # minimum value of b
-b_max             = 1.0                                      # maximum value of b
+b_max             = upper_limit                              # maximum value of b / 1.0
 epsilon_min       = 0.0                                      # minimum value of epsilon
-epsilon_max       = 1.2                                      # maximum value of epsilon
+epsilon_max       = upper_limit                              # maximum value of epsilon / 1.2
 
 #%%
 ######################
@@ -123,23 +124,21 @@ normalization = {
 
 # Parameters definition
 theta     = 1
-NTrain    = 50 
-NTest     = 50
+NTrain    = 500 
+NTest     = 500
 NTest_ext = 50 
 
 # Generating training dataset
-x0_train, u_train, training_target, a_train, b_train, eps_train = utils.generate_dataset(NTrain, normalization, theta, t_max, dt_num)
+seed = 0
+x0_train, u_train, training_target, a_train, b_train, eps_train = utils.generate_dataset(NTrain, normalization, theta, t_max, dt_num, seed)
 
 # Generating testing dataset
-x0_test, u_test, testing_target, a_test, b_test, eps_test = utils.generate_dataset(NTest, normalization, theta, t_max, dt_num)
-testing_target = training_target
-x0_test = x0_train
-a_test = a_train
-b_test = b_train
-eps_test = eps_train
+seed = 10
+x0_test, u_test, testing_target, a_test, b_test, eps_test = utils.generate_dataset(NTest, normalization, theta, t_max, dt_num, seed)
 
 # Generating extended testing dataset
-x0_test_ext, u_test_ext, testing_target_ext, a_test_ext, b_test_ext, eps_test_ext = utils.generate_dataset(NTest_ext, normalization, theta, t_max_ext, dt_num)
+seed = 20
+x0_test_ext, u_test_ext, testing_target_ext, a_test_ext, b_test_ext, eps_test_ext = utils.generate_dataset(NTest_ext, normalization, theta, t_max_ext, dt_num, seed)
 
 #%%
 ######################
@@ -160,7 +159,7 @@ dataset_train = {
         'times'         : t_num.T,            # [num_times]
         'inp_parameters': inp_params_train,   # [num_samples x num_par]
         'inp_signals'   : training_var_numpy, # [num_samples x num_times x num_signals]
-        'out_fields'    : training_target,    # [num_samples x num_times x num_targets] # RINOMINATO CAMPO
+        'out_fields'    : training_target,    # [num_samples x num_times x num_targets]
         'num_times'     : t_max,
         'time_vec'      : t.T,
         'frac'          : int(dt/dt_num)
@@ -169,7 +168,7 @@ dataset_testg = {
         'times'         : t_num.T,            # [num_times]
         'inp_parameters': inp_params_test,    # [num_samples x num_par]
         'inp_signals'   : testing_var_numpy,  # [num_samples x num_times x num_signals]
-        'out_fields'    : testing_target,     # [num_samples x num_times x num_targets] # RINOMINATO CAMPO
+        'out_fields'    : testing_target,     # [num_samples x num_times x num_targets]
         'num_times'     : t_max,
         'time_vec'      : t.T,
         'frac'          : int(dt/dt_num)
@@ -178,7 +177,7 @@ dataset_test_ext = {
         'times'         : t_num_ext.T,           # [num_times]
         'inp_parameters': inp_params_test_ext,   # [num_samples x num_par]
         'inp_signals'   : testing_var_numpy_ext, # [num_samples x num_times x num_signals]
-        'out_fields'    : testing_target_ext,    # [num_samples x num_times x num_targets] # RINOMINATO CAMPO
+        'out_fields'    : testing_target_ext,    # [num_samples x num_times x num_targets]
         'num_times'     : t_max_ext,
         'time_vec'      : t_ext.T,
         'frac'          : int(dt/dt_num)
@@ -188,7 +187,7 @@ dataset_coarse = {
         'coarse_indexes': coarse_indexes,     
         'inp_parameters': inp_params_train,   # [num_samples x num_par]
         'inp_signals'   : training_var_numpy, # [num_samples x num_times x num_signals]
-        'out_fields'    : training_target,    # [num_samples x num_times x num_targets] # RINOMINATO CAMPO
+        'out_fields'    : training_target,    # [num_samples x num_times x num_targets]
         'num_times'     : t_max,
         'time_vec'      : t.T,
         'frac'          : int(dt/dt_num)
@@ -208,7 +207,6 @@ utils.process_dataset_epi_real(dataset_test_ext, problem, normalization, dt = No
 utils.process_dataset_epi_real(dataset_coarse, problem, normalization, dt = None, num_points_subsample = None)
 print(dataset_train["inp_signals"].shape)
 print(dataset_train["out_fields"].shape)
-dataset_testg = dataset_train
 
 #%%
 ##############################
@@ -252,7 +250,7 @@ def evolve_dynamics(dataset, initial_lat_state): #initial_state (n_samples x n_l
 
 def loss_MSE(dataset, lat_states):
     state = evolve_dynamics(dataset, lat_states)
-    MSE = tf.reduce_mean(tf.square((state) - dataset['out_fields'])) #siccome è tutto normalizzato possiamo considerareMSE assoluto
+    MSE = tf.reduce_mean(tf.square((state) - dataset['out_fields']))
     return MSE
 
 def loss_MSE_coarse(dataset, lat_states):
@@ -272,12 +270,10 @@ def loss_MSE_matrixnorm(dataset, lat_states):
     matrix_loss = tf.zeros(state.shape[0], dtype=tf.float64)
     for i in range(0,state.shape[1],5):
         for j in range(0,i+1,step=5):
-            #print("i:", i, "j:", j)
             d1 = (state[:,i,0] - state[:,j,0])**2 + (state[:,i,1] - state[:,j,1])**2
             d2 = (dataset['out_fields'][:,i,0] - dataset['out_fields'][:,j,0])**2 + (dataset['out_fields'][:,i,1] - dataset['out_fields'][:,j,1])**2
             diff = (d1 - d2)**2
             matrix_loss += diff
-            #/(state.shape[1]/5)
 
     return MSE + 1e-4 * tf.reduce_mean(matrix_loss)
 
@@ -287,14 +283,12 @@ def loss_matrixnorm(dataset, lat_states):
     matrix_loss = tf.zeros(state.shape[0], dtype=tf.float64)
     for i in range(0,state.shape[1],5):
         for j in range(0,i+1,step=5):
-            #print("i:", i, "j:", j)
             d1 = (state[:,i,0] - state[:,j,0])**2 + (state[:,i,1] - state[:,j,1])**2
             d2 = (dataset['out_fields'][:,i,0] - dataset['out_fields'][:,j,0])**2 + (dataset['out_fields'][:,i,1] - dataset['out_fields'][:,j,1])**2
             diff = (d1 - d2)**2
             matrix_loss += diff
-            #/(state.shape[1]/5)
 
-    return tf.reduce_mean(matrix_loss)
+    return 1e-4 * tf.reduce_mean(matrix_loss)
 
 def weights_reg(NN):
     return sum([tf.reduce_mean(tf.square(lay.kernel)) for lay in NN.layers])/len(NN.layers)
@@ -304,8 +298,8 @@ def weights_reg(NN):
 # LOSS WEIGHTS #
 ################
 
-nu_loss_train = 1    #3e-2 # weight MSE metric
-alpha_reg     = 0#1e-8       # regularization of trainable variables
+nu_loss_train = 3e-2 # weight MSE metric
+alpha_reg     = 1e-8 # regularization of trainable variables
 
 #%%
 ######################
@@ -324,8 +318,12 @@ def loss_train_matrixnorm():
     return l
 
 def loss_valid():
-    #l = loss_MSE(dataset_testg, x0_test)
-    l = loss_MSE(dataset_train, x0_train) + alpha_reg * weights_reg(NNdyn)
+    l = loss_MSE(dataset_testg, x0_test)
+    #l = loss_MSE(dataset_train, x0_train) + alpha_reg * weights_reg(NNdyn)
+    return l
+
+def loss_valid_MatrixNorm():
+    l = loss_MSE_matrixnorm(dataset_testg, x0_test)
     return l
 
 def val_train():
@@ -340,7 +338,7 @@ def loss_train_coarse():
     l = nu_loss_train * loss_MSE_coarse(dataset_coarse, x0_train) + alpha_reg * weights_reg(NNdyn)
     return l
 
-val_metric = loss_valid
+val_metric = loss_valid_MatrixNorm
 
 #%%
 #######################
@@ -348,12 +346,12 @@ val_metric = loss_valid
 #######################
 
 if coarse_training == 0:
-    losses_dict = {'Standard': loss_train_matrixnorm, 'MatrixNorm': loss_train_matrixnorm} 
+    losses_dict = {'Standard': loss_train, 'MatrixNorm': loss_train_matrixnorm} 
     opt_train   = optimization.OptimizationProblem(trainable_variables_train, losses_dict, val_metric)
 
-    num_epochs_Adam_train        = 2000 #500
+    num_epochs_Adam_train        = 2500 #500
     num_epochs_BFGS_train        = 2000 #1000
-    num_epochs_BFGS_matrix_train = 20# 2000
+    num_epochs_BFGS_matrix_train = 3000 #2000
 
     print('training (Adam)...')
     init_adam_time = time.time()
@@ -365,24 +363,12 @@ if coarse_training == 0:
     opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=5e-3))
     end_adam_time = time.time()
 
-    print('training (Adam)...')
-    init_adam_time = time.time()
-    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-3))
-    end_adam_time = time.time()
-
-    print('training (BFGS)...')
-    init_bfgs_time = time.time()
-    opt_train.optimize_BFGS(num_epochs_BFGS_train)
-    end_bfgs_time = time.time()    
+    num_plot   = 6
+    rand_vec   = [0,1,2,3,4,5] #np.random.randint(0,NTest,num_plot)
 
     variables1 = evolve_dynamics(dataset_testg, x0_test)
-    num_plot  = 6
-    #rand_vec  = np.random.randint(0,NTest,num_plot)
-    rand_vec  = np.random.randint(0,NTrain,num_plot)
-    tt        = t_num[0,:]
-
+    tt         = t_num[0,:]
     fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
-
     for i in range(2):
         for j in range(int(num_plot/2)):
             ind = rand_vec[2*i+j]
@@ -395,19 +381,18 @@ if coarse_training == 0:
             axs[i,j].set_title('NeuralODE: Traiettoria vera vs predetta')
             axs[i,j].grid(True)
             axs[i,j].legend(loc='upper right')
-
     plt.savefig(folder + 'test_prematrix.png')
-'''
+    
     opt_train.set_loss_train('MatrixNorm')
 
-    print('training (BFGS)...')
+    print('training (Adam)...')
     init_adam_time = time.time()
-    opt_train.optimize_BFGS(num_epochs_BFGS_matrix_train)
-    end_adam_time = time.time()
+    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-3))
+    end_adam_time = time.time()   
 
     variables2 = evolve_dynamics(dataset_testg, x0_test)
+    tt         = t_num[0,:]
     fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
-
     for i in range(2):
         for j in range(int(num_plot/2)):
             ind = rand_vec[2*i+j]
@@ -420,11 +405,103 @@ if coarse_training == 0:
             axs[i,j].set_title('NeuralODE: Traiettoria vera vs predetta')
             axs[i,j].grid(True)
             axs[i,j].legend(loc='upper right')
-
     plt.savefig(folder + 'test_postmatrix.png')
 
+    print('training (BFGS)...')
+    init_bfgs_time = time.time()
+    opt_train.optimize_BFGS(num_epochs_BFGS_matrix_train)
+    end_bfgs_time = time.time()
+
+    variables3 = evolve_dynamics(dataset_testg, x0_test)
+    fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
+
+    for i in range(2):
+        for j in range(int(num_plot/2)):
+            ind = rand_vec[2*i+j]
+            axs[i,j].plot(tt, testing_target[ind,:,0], 'r-', label='v true')
+            axs[i,j].plot(tt, 5/2*variables3[ind,:,0], 'k--', label='v pred')
+            axs[i,j].plot(tt, testing_target[ind,:,1], 'g-', label='w true')
+            axs[i,j].plot(tt, 5/2*variables3[ind,:,1], 'b--', label='w pred')
+            axs[i,j].set_xlabel('Time')
+            axs[i,j].set_ylabel('State')
+            axs[i,j].set_title('NeuralODE: Traiettoria vera vs predetta')
+            axs[i,j].grid(True)
+            axs[i,j].legend(loc='upper right')
+
+    plt.savefig(folder + 'test_postmatrix_BFGS.png')
+
     train_times = [end_adam_time - init_adam_time, end_bfgs_time - init_bfgs_time]
-'''
+
+    # Confusion matrix: here "positive" means "limit cycle detected"
+    true_positive  = 0
+    false_positive = 0
+    true_negative  = 0
+    false_negative = 0
+
+    for i in range(NTest):
+        predicted_check = utils.check_limit_cycle(5/2*variables3[i,:,:], 0.5)
+        true_check      = utils.check_limit_cycle(testing_target[i,:,:], 0.5)
+
+        if predicted_check == 1 and true_check == 1:
+            true_positive += 1
+        elif predicted_check == 1 and true_check == 0:
+            false_positive += 1
+        elif predicted_check == 0 and true_check == 0:
+            true_negative += 1
+        elif predicted_check == 0 and true_check == 1:
+            false_negative += 1
+    confusion_matrix = np.array([[true_positive, false_negative],[false_positive, true_negative]])
+
+    from sklearn import metrics
+
+    cm = metrics.ConfusionMatrixDisplay(confusion_matrix = confusion_matrix, display_labels = ['Limit Cycle', 'No Limit Cycle'])
+    cm.plot()
+    fig = cm.figure_
+    fig.subplots_adjust(left=0.25)
+    fig.tight_layout()
+    fig.savefig(folder + 'confusion_matrix.png')
+
+    MeanSquareErrors = []
+    for i in range(NTest):
+        mse   = tf.reduce_mean(tf.square((variables3[i,:,:]) - dataset_testg['out_fields'][i,:,:]))
+        MeanSquareErrors.append(mse.numpy())
+
+    fig, axs = plt.subplots(1,2, figsize=(15,9))
+    axs[0].hist(MeanSquareErrors, bins=50, color=colors[0])
+    axs[0].set_xlabel('Frequency')
+    axs[0].set_ylabel('MSE')
+    axs[0].set_title('MSE Distribution over Test Set')
+    axs[0].grid(True)
+    axs[1].boxplot(MeanSquareErrors, vert=True, patch_artist=True, boxprops=dict(facecolor=colors[1]))
+    axs[1].set_ylabel('MSE')
+    axs[1].set_title('MSE Boxplot over Test Set')
+    axs[1].grid(True)
+    plt.savefig(folder + 'MSE_distribution.png')
+
+    fig, axs = plt.subplots(1,2, figsize=(15,9))
+    axs[0].hist(MeanSquareErrors, bins=50, color=colors[0], range=(0,0.1))
+    axs[0].set_xlabel('Frequency')
+    axs[0].set_ylabel('MSE')
+    axs[0].set_title('MSE Distribution over Test Set')
+    axs[0].grid(True)
+    axs[1].boxplot(MeanSquareErrors, vert=True, patch_artist=True, boxprops=dict(facecolor=colors[1]))
+    axs[1].set_ylabel('MSE')
+    axs[1].set_title('MSE Boxplot over Test Set')
+    axs[1].grid(True)
+    plt.savefig(folder + 'MSE_distribution_zoom.png')
+#%%
+for i in range(NTest):
+    if MeanSquareErrors[i] > 0.2:
+        plt.figure(figsize=(15,9))
+        plt.plot(tt, testing_target[i,:,0], 'r-', label='v true', linewidth=2)
+        plt.plot(tt, 5/2*variables3[i,:,0], 'k--', label='v pred', linewidth=2)
+        plt.plot(tt, testing_target[i,:,1], 'g-', label='w true', linewidth=2)
+        plt.plot(tt, 5/2*variables3[i,:,1], 'b--', label='w pred', linewidth=2)
+        plt.xlabel('Time')
+        plt.ylabel('State')
+        plt.grid(True)
+        plt.legend(loc='upper right')
+        plt.savefig(folder + 'high_MSE_trajectory_' + str(i) + '.png')
 
 #%%
 ###################
@@ -486,9 +563,9 @@ print('Extended testing error: ', loss_valid_ext().numpy())
 ############################
 
 if coarse_training == 0:
-    variables = evolve_dynamics(dataset_train, x0_train)#evolve_dynamics(dataset_testg, x0_test)
+    variables = evolve_dynamics(dataset_testg, x0_test)
     num_plot  = 6
-    rand_vec  = np.array([0, 1, 2, 7, 8, 9])#np.random.randint(0,NTrain,num_plot)
+    rand_vec  = [0,1,2,3,4,5] #np.random.randint(0,NTest,num_plot)
     tt        = t_num[0,:]
 
     fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))

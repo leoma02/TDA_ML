@@ -279,7 +279,7 @@ plt.ylabel('State')
 plt.title('NeuralODE: Traiettoria vera vs predetta')
 plt.legend()
 plt.grid(True)
-plt.savefig(folder + 'test.png')
+plt.savefig(folder + 'test1.png')
 
 #%% Saving results
 if os.path.exists(folder_train) == False:
