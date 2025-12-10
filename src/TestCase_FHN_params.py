@@ -545,7 +545,7 @@ folder_models = 'result_models'
 if os.path.exists(folder_models) == False:
     os.mkdir(folder_models)
 
-NNdyn.save(folder_models + '/MSE_model_30.keras')
+NNdyn.save(folder_models + '/MSE_MatrixNorm_model_30.keras')
 
 #%%
 ###################
