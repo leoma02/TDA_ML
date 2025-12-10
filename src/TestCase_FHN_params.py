@@ -10,7 +10,6 @@ import time
 import utils
 import optimization
 import shutil
-import TDA_utils
 
 # Set the color cycle to the "Accent" palette
 colors = plt.cm.tab20c.colors
@@ -53,7 +52,7 @@ v_min             = -2.5                                     # minimum value of 
 v_max             = 2.5                                      # maximum value of v
 w_min             = -2.5                                     # minimum value of w
 w_max             = 2.5                                      # maximum value of w
-upper_limit       = 0.8
+upper_limit       = 1.5
 u_min             = 0.2                                      # minimum value of I_ext
 u_max             = upper_limit                              # maximum value of I_ext / 1.4
 a_min             = 0.1                                      # minimum value of a
@@ -123,22 +122,21 @@ normalization = {
 #####################
 
 # Parameters definition
-theta     = 1
 NTrain    = 500 
 NTest     = 500
 NTest_ext = 50 
 
 # Generating training dataset
 seed = 0
-x0_train, u_train, training_target, a_train, b_train, eps_train = utils.generate_dataset(NTrain, normalization, theta, t_max, dt_num, seed)
+x0_train, u_train, training_target, a_train, b_train, eps_train = utils.generate_dataset(NTrain, normalization, t_max, dt_num, seed)
 
 # Generating testing dataset
 seed = 10
-x0_test, u_test, testing_target, a_test, b_test, eps_test = utils.generate_dataset(NTest, normalization, theta, t_max, dt_num, seed)
+x0_test, u_test, testing_target, a_test, b_test, eps_test = utils.generate_dataset(NTest, normalization, t_max, dt_num, seed)
 
 # Generating extended testing dataset
 seed = 20
-x0_test_ext, u_test_ext, testing_target_ext, a_test_ext, b_test_ext, eps_test_ext = utils.generate_dataset(NTest_ext, normalization, theta, t_max_ext, dt_num, seed)
+x0_test_ext, u_test_ext, testing_target_ext, a_test_ext, b_test_ext, eps_test_ext = utils.generate_dataset(NTest_ext, normalization, t_max_ext, dt_num, seed)
 
 #%%
 ######################
@@ -491,7 +489,7 @@ if coarse_training == 0:
     plt.savefig(folder + 'MSE_distribution_zoom.png')
 #%%
 for i in range(NTest):
-    if MeanSquareErrors[i] > 0.2:
+    if MeanSquareErrors[i] > 0.25:
         plt.figure(figsize=(15,9))
         plt.plot(tt, testing_target[i,:,0], 'r-', label='v true', linewidth=2)
         plt.plot(tt, 5/2*variables3[i,:,0], 'k--', label='v pred', linewidth=2)
@@ -542,7 +540,12 @@ if coarse_training == 1:
 # MODEL SAVING #
 ################
 
-#NNdyn.save(folder + 'NNdyn')
+folder_models = 'result_models'
+
+if os.path.exists(folder_models) == False:
+    os.mkdir(folder_models)
+
+NNdyn.save(folder_models + '/MSE_model_30.keras')
 
 #%%
 ###################

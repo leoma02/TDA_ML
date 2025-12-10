@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from scipy import interpolate
 import scipy.io
+from scipy.integrate import solve_ivp
+
 
 def normalize_forw(v, v_min, v_max, axis = None):
     v_min, v_max = reshape_min_max(len(v.shape), v_min, v_max, axis)
@@ -223,7 +225,26 @@ def traj_computation(epsilon,a,b,Iext,theta,T,dt,v0,w0,plot=1):
   return x
 
 
-def generate_dataset(NT,normalization,theta,T,dt,seed):
+def traj_gen(epsilon,a,b,Iext,T,dt,v0,w0):
+    
+	def fhn(t, y, eps, a, b, I):
+			v, w = y
+			dvdt = v - (v**3)/3 - w + I
+			dwdt = eps*(v + a - b*w)
+			return [dvdt, dwdt]
+
+	t_span = (0,T)
+	t_eval = np.arange(0, T, dt)
+	sol    = solve_ivp(fhn,t_span,[v0,w0],args=(epsilon, a, b, Iext),method='BDF',t_eval=t_eval)
+
+	t = sol.t
+	v = sol.y[0]
+	w = sol.y[1]
+
+	return v,w
+
+
+def generate_dataset(NT,normalization,T,dt,seed):
     
     np.random.seed(seed)
 
@@ -253,7 +274,9 @@ def generate_dataset(NT,normalization,theta,T,dt,seed):
         x_min = np.array([normalization['output_fields']['v']['min'], normalization['output_fields']['w']['min']])
         x_max = np.array([normalization['output_fields']['v']['max'], normalization['output_fields']['w']['max']])
 
-        x_temp = traj_computation(epsilon,a,b,Iext,theta,T,dt,v0,w0,0)
+        #x_temp = traj_computation(epsilon,a,b,Iext,theta,T,dt,v0,w0,0)
+        v,w = traj_gen(epsilon,a,b,Iext,T,dt,v0,w0)
+        x_temp = np.hstack((v.reshape(-1,1),w.reshape(-1,1)))
         trajectories.append(x_temp)
         x0.append( (2.0*x_temp[0]-x_min-x_max)/(x_max-x_min) )
 
