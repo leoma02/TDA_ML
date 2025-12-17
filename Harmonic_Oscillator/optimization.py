@@ -1,0 +1,192 @@
+import numpy as np
+import tensorflow as tf
+import scipy.optimize as sopt
+
+class OptimizationProblem():
+    """
+    Class representing an optimization problem with switchable loss functions.
+    """
+    def __init__(self, variables, loss_train, loss_valid):
+        """
+        Parameters
+        ----------
+        variables : list of tf.Variable
+        loss_train : callable or dict[str, callable]
+            Training loss function(s). Can be a single callable or a dict of callables.
+        loss_valid : callable
+            Validation loss function.
+        """
+        self.variables = variables if isinstance(variables, (list, tuple)) else [variables]
+
+        # Support both single or multiple training losses
+        if isinstance(loss_train, dict):
+            self.loss_train_dict = loss_train
+            self.current_loss_key = list(loss_train.keys())[0]  # default: first one
+            self.loss_train = loss_train[self.current_loss_key]
+        else:
+            self.loss_train_dict = {'default': loss_train}
+            self.current_loss_key = 'default'
+            self.loss_train = loss_train
+
+        self.loss_valid = loss_valid
+        self.stitcher = VariablesStitcher(self.variables)
+
+        self.compile()
+
+        self.iteration = 0
+        self.iterations_history = []
+        self.loss_train_history = []
+        self.loss_valid_history = []
+        self.iteration_callback()
+
+    # Dynamic loss switching
+    def set_loss_train(self, name):
+        """
+        Changes the active loss function.
+        """
+        if name not in self.loss_train_dict:
+            raise ValueError(f"Loss '{name}' not found. Available choices: {list(self.loss_train_dict.keys())}")
+        self.loss_train = self.loss_train_dict[name]
+        self.current_loss_key = name
+        self.compile()  # Re-compile to update losses
+        print(f"--> Training loss switched to '{name}'")
+
+    def compile(self):
+        self.ag_train_loss = tf.function(self.loss_train)
+        self.ag_train_grad = tf.function(self.compute_gradient)
+        self.ag_train_loss_grad = tf.function(lambda params: self.get_gradient_and_loss(params_1d=params))
+        self.ag_valid_loss = tf.function(self.loss_valid)
+
+        print(f'Tracing functions (loss = "{self.current_loss_key}")...')
+        self.ag_train_loss()
+        self.ag_train_grad()
+        self.ag_train_loss_grad(self.stitcher.stitch(self.variables))
+        self.ag_valid_loss()
+        print('Tracing completed.')
+
+    def get_gradient_and_loss(self, params_1d):
+        # Apply new parameters to variables
+        self.stitcher.update_variables(params_1d)
+
+        with tf.GradientTape() as tape:
+            loss_value = self.loss_train()
+
+        grads = tape.gradient(
+            loss_value,
+            self.variables,
+            unconnected_gradients=tf.UnconnectedGradients.ZERO
+        )
+        grads_1d = self.stitcher.stitch(grads)
+        return loss_value, grads_1d
+        
+    def ag_train_loss_grad_numpy(self, params_1d):
+        loss, grad = self.ag_train_loss_grad(params_1d)
+        return loss.numpy(), grad.numpy()
+        
+    def train_loss_numpy(self, params_1d):
+        loss, grad = self.ag_train_loss_grad(params_1d)
+        return loss.numpy()
+        
+    def compute_gradient(self):
+        with tf.GradientTape() as tape:
+            loss_value = self.loss_train()
+        grads = tape.gradient(
+            loss_value,
+            self.variables,
+            unconnected_gradients=tf.UnconnectedGradients.ZERO
+        )
+        return grads
+
+    def iteration_callback(self):
+        if self.iteration % 10 == 0:
+            self.iterations_history.append(self.iteration)
+            self.loss_train_history.append(self.ag_train_loss())
+            self.loss_valid_history.append(self.ag_valid_loss())
+            print('epoch% 5d   -   training loss: %1.3e   -   validation loss %1.3e' % 
+                  (self.iteration, self.loss_train_history[-1], self.loss_valid_history[-1]))
+        self.iteration += 1
+   
+    def basin_hopping_callback(self, x, f, accept):
+        self.iteration += 1
+        val = self.loss_valid()
+        print(f"Iteration {self.iteration}: f = {f}, accepted = {accept}, validation = {val}")
+
+    # !
+    def optimize_keras(self, num_epochs, optimizer):
+        for _ in range(num_epochs):
+            #print('Epoch: ' + str(_))
+            optimizer.apply_gradients(zip(self.ag_train_grad(), self.variables))
+            self.iteration_callback()
+    
+    # !
+    def optimize_BFGS(self, num_epochs):
+        options = {'maxiter': num_epochs, 'gtol': 1e-100}
+        init_params = self.stitcher.stitch(self.variables).numpy()
+
+        def callback(_):
+            self.iteration_callback()
+            return False
+    
+        result = sopt.minimize(fun = self.ag_train_loss_grad_numpy,
+                x0 = init_params,
+                method = 'BFGS',
+                jac = True,
+                tol = 1e-100,
+                options = options,
+                callback = callback)
+        
+        print("Optimization message:", result.message)
+        print("Optimization success:", result.success)
+        print("Final iterations:", result.nit)
+    
+    def optimize_basinhopping(self, num_epochs):
+        options = {'maxiter': num_epochs, 'gtol': 1e-100}
+        init_params = self.stitcher.stitch(self.variables).numpy()
+
+        sopt.basinhopping(func = self.train_loss_numpy,
+                x0 = init_params,
+                niter = options['maxiter'],
+                callback = self.basin_hopping_callback)
+
+
+class VariablesStitcher:
+    """
+    Helper class to reshape a list of tf.Variable's into a 1D tf.Tensor/np.array and vice versa.
+    """
+    def __init__(self, variables):
+
+        self.variables = variables
+
+        # obtain the shapes of the variables
+        self.shapes = tf.shape_n(self.variables)
+        self.n_tensors = len(self.shapes)
+
+        count = 0
+        self.idx = [] # stitch indices
+        part = [] # partition indices
+
+        for i, shape in enumerate(self.shapes):
+            n = np.prod(shape)
+            self.idx.append(tf.reshape(tf.range(count, count+n, dtype=tf.int32), shape))
+            part.extend([i]*n)
+            count += n
+
+        self.__num_variables = count
+
+        self.part = tf.constant(part)
+
+    @property
+    def num_variables(self):
+        return self.__num_variables
+
+    def update_variables(self, params_1d):
+        params = tf.dynamic_partition(params_1d, self.part, self.n_tensors)
+        for i, (shape, param) in enumerate(zip(self.shapes, params)):
+            self.variables[i].assign(tf.reshape(param, shape))
+
+    def reverse_stitch(self, params_1d):
+        params = tf.dynamic_partition(params_1d, self.part, self.n_tensors)
+        return [tf.reshape(param, shape) for i, (shape, param) in enumerate(zip(self.shapes, params))]
+
+    def stitch(self, v = None):
+        return tf.dynamic_stitch(self.idx, self.variables if v is None else v)
