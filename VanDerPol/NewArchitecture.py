@@ -23,8 +23,7 @@ class ClipConstraint(tf.keras.constraints.Constraint):
     def __call__(self, w):
         return tf.clip_by_value(w, self.min_value, self.max_value)
 
-save_train      = 1    # save training
-coarse_training = 0    # enable/disable training with coarse dataset
+save_train = 1    # save training
 #%% 
 ####################
 # MODEL PARAMETERS #
@@ -399,10 +398,10 @@ def evolve_dynamics_symplectic(dataset, initial_lat_state):
 ################
 
 nu_loss_train = 1    # weight MSE metric
-alpha_reg     = 1e-5 # regularization of trainable variables
+alpha_reg     = 1e-6 # regularization of trainable variables
 lambda_1      = 1e-2    # weight MSE metric
-lambda_2      = 3e-3 # regularization of energy gradient
-lambda_3      = 3e-3 # regularization of dissipation term
+lambda_2      = 3e-4 # regularization of energy gradient
+lambda_3      = 3e-4 # regularization of dissipation term
 
 #%%
 ##################
@@ -629,7 +628,7 @@ def MSE_bitopological_loss_symplectic_vec(dataset, lat_states, pairs_h1, mask_h1
     per_traj = tf.square(d1 - d2) + tf.square(d3 - d4)
 
     per_traj = per_traj * mask_h1
-    denom    = tf.reduce_sum(mask) + 1e-10
+    denom    = tf.reduce_sum(mask_h1) + 1e-10
 
     topological_term = tf.reduce_sum(per_traj)
 
@@ -720,66 +719,50 @@ val_metric = loss_valid
 # NON COARSE TRAINING #
 #######################
 
-if coarse_training == 0:
-    f = open(folder +'training_data.txt','x')
-    losses_dict = {'Standard': loss_train_structured, 'TopoLoss': loss_train_sw} 
-    opt_train   = optimization.OptimizationProblem(trainable_variables_train, losses_dict, val_metric)
+f = open(folder +'training_data.txt','x')
+losses_dict = {'Standard': loss_train_structured, 'TopoLoss': loss_train_sw} 
+opt_train   = optimization.OptimizationProblem(trainable_variables_train, losses_dict, val_metric)
 
-    num_epochs_Adam_train        = 2500 #500
-    num_epochs_BFGS_train        = 2000 #1000
-    num_epochs_BFGS_matrix_train = 3000 #2000
+num_epochs_Adam_train        = 2500 #500
+num_epochs_BFGS_train        = 2000 #1000
+num_epochs_BFGS_matrix_train = 3000 #2000
 
-    print('training (Adam)...')
-    init_adam_time = time.time()
-    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-2))
-    end_adam_time = time.time()
+print('training (Adam)...')
+init_adam_time = time.time()
+opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-2))
+end_adam_time = time.time()
 
-    print('training (Adam)...')
-    init_adam_time = time.time()
-    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=5e-3))
-    end_adam_time = time.time()
+print('training (Adam)...')
+init_adam_time = time.time()
+opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=5e-3))
+end_adam_time = time.time()
 
-    print('training (Adam)...')
-    init_adam_time = time.time()
-    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-3))
-    end_adam_time = time.time()
+print('training (Adam)...')
+init_adam_time = time.time()
+opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-3))
+end_adam_time = time.time()
 
-    #opt_train.set_loss_train('TopoLoss')
+#opt_train.set_loss_train('TopoLoss')
 
-    print('training (BFGS)...')
-    init_bfgs_time = time.time()
-    opt_train.optimize_BFGS(num_epochs_BFGS_matrix_train)
-    end_bfgs_time = time.time()
+print('training (BFGS)...')
+init_bfgs_time = time.time()
+opt_train.optimize_BFGS(num_epochs_BFGS_matrix_train)
+end_bfgs_time = time.time()
 
-    #opt_train.set_loss_train('TopoLoss')
+#opt_train.set_loss_train('TopoLoss')
 
-    print('training (BFGS)...')
-    init_bfgs_time = time.time()
-    opt_train.optimize_BFGS(num_epochs_BFGS_matrix_train)
-    end_bfgs_time = time.time()
+print('training (BFGS)...')
+init_bfgs_time = time.time()
+opt_train.optimize_BFGS(num_epochs_BFGS_matrix_train)
+end_bfgs_time = time.time()
 
-    tt         = t_num[0,:]
-    num_plot   = 6
-    rand_vec   = [0,1,2,3,4,5] #np.random.randint(0,NTest,num_plot)
-    variables3, _, _ = evolve_dynamics_symplectic(dataset_testg, x0_test)
-    fig, axs   = plt.subplots(2,int(num_plot/2), figsize=(15,9))
+tt         = t_num[0,:]
+num_plot   = 6
+rand_vec   = [0,1,2,3,4,5] #np.random.randint(0,NTest,num_plot)
+variables3, _, _ = evolve_dynamics_symplectic(dataset_testg, x0_test)
+fig, axs   = plt.subplots(2,int(num_plot/2), figsize=(15,9))
 
-    for i in range(2):
-        for j in range(int(num_plot/2)):
-            ind = rand_vec[2*i+j]
-            axs[i,j].plot(tt, testing_target[ind,:,0], 'r-', label='v true')
-            axs[i,j].plot(tt, 5/2*variables3[ind,:,0], 'k--', label='v pred')
-            axs[i,j].plot(tt, testing_target[ind,:,1], 'g-', label='w true')
-            axs[i,j].plot(tt, 5/2*variables3[ind,:,1], 'b--', label='w pred')
-            axs[i,j].set_xlabel('Time')
-            axs[i,j].set_ylabel('State')
-            axs[i,j].set_title('NeuralODE: Traiettoria vera vs predetta')
-            axs[i,j].grid(True)
-            axs[i,j].legend(loc='upper right')
-
-    plt.savefig(folder + 'test_postmatrix_BFGS.png')
-
-    train_times = [end_adam_time - init_adam_time, end_bfgs_time - init_bfgs_time]
+train_times = [end_adam_time - init_adam_time, end_bfgs_time - init_bfgs_time]
 
 #%%
 #####################
@@ -880,274 +863,12 @@ for i in range(0,NTest,25):
 
 #     plt.savefig(folder + 'test_fine' + str(i) + '.png')
 
-#%%
-####################
-# SYMPLECTIC EULER #
-####################
-def evolve_dynamics_symplectic_dt(dataset, initial_lat_state, dt):
-    lat_state = initial_lat_state
-    lat_state_history = tf.TensorArray(tf.float64, size=int(t_max/dt))
-    lat_state_history = lat_state_history.write(0, lat_state)
-    
-    inp_params = dataset['inp_parameters']  # (N, num_params)
-
-    for i in tf.range(int(t_max/dt) - 1):
-        v = lat_state[:, 0:1]
-        w = lat_state[:, 1:2]
-
-        f_n = model(tf.concat([lat_state, inp_params], axis=-1))  # (N,2)=[dv,dw]
-        dw_n = f_n[:, 1:2]
-        w_new = w + dt * dw_n
-
-        lat_mixed = tf.concat([v, w_new], axis=-1)
-        f_m = model(tf.concat([lat_mixed, inp_params], axis=-1))
-        dv_m = f_m[:, 0:1]
-        v_new = v + dt * dv_m
-
-        lat_state = tf.concat([v_new, w_new], axis=-1)
-        lat_state_history = lat_state_history.write(i + 1, lat_state)
-
-    return tf.transpose(lat_state_history.stack(), perm=(1, 0, 2))
-
-dt = 0.125
-variables5 = evolve_dynamics_symplectic_dt(dataset_testg, x0_test, dt)
-# for i in range(0,NTest,25):
-#     fig, ax = plt.subplots()
-#     ax.plot(tt, testing_target[i,:,0], 'r-', label='v true')
-#     ax.plot(np.arange(0,t_max,dt), 5/2*variables5[i,:,0], 'k--', label='v pred')
-#     ax.plot(tt, testing_target[i,:,1], 'g-', label='w true')
-#     ax.plot(np.arange(0,t_max,dt), 5/2*variables5[i,:,1], 'b--', label='w pred')
-#     ax.set_xlabel('Time')
-#     ax.set_ylabel('State')
-#     ax.set_title('NeuralODE: Traiettoria vera vs predetta')
-#     ax.grid(True)
-#     ax.legend(loc='upper right')        
-#     #plt.savefig(folder + 'test_' + str(dt) + '_' + str(i) + '.png')
-
-
-#%%
-#########################
-# DERIVATIVE COMPARISON #
-#########################
-lat_state = x0_test_fine
-lat_state_history = tf.TensorArray(tf.float64, size = dataset_test_fine['num_times'])
-dt_ref     = normalization['time']['time_constant']
-inp_params = dataset_test_fine['inp_parameters']  # shape (N, num_params)
-dt_int     = t_max/dataset_test_fine['num_times']
-
-for i in tf.range(dataset_test_fine['num_times'] - tf.constant(1)):
-    inputs = [lat_state, inp_params]
-    nn     = NNdyn(tf.concat(inputs, axis = -1))
-    lat_state = lat_state + dt_int/dt_ref * nn
-    lat_state_history = lat_state_history.write(i, nn)
-computed_der = tf.transpose(lat_state_history.stack(), perm=(1,0,2))
-
-true_der = tf.TensorArray(tf.float64, size = NTest)
-for i in range(NTest):
-    v_der = dataset_test_fine['out_fields'][i,:,1]
-    w_der = -(0.5*dataset_test_fine['inp_parameters'][i]+0.5)**2 * dataset_test_fine['out_fields'][i,:,0]
-    true_der = true_der.write(i, np.stack((v_der,w_der), axis=-1))
-true_der = tf.transpose(true_der.stack(), perm=(0,1,2))
-
-for i in range(0,NTest,25):
-    fig, ax = plt.subplots()
-    ax.plot(t_num_fine[0,:], computed_der[i,:,0], 'k--', label='v pred der')
-    ax.plot(t_num_fine[0,:], true_der[i,:,0], 'r-', label='v true der')
-    ax.plot(t_num_fine[0,:], computed_der[i,:,1], 'b--', label='w pred der')
-    ax.plot(t_num_fine[0,:], true_der[i,:,1], 'g-', label='w true der')
-    ax.set_xlabel('Time')
-    ax.set_ylabel('Derivative')
-    ax.set_title('NeuralODE: Derivata predetta vs vera')
-    ax.grid(True)
-    ax.legend(loc='upper right')
-    plt.savefig(folder + 'derivative_comparison' + str(i) + '.png')
-
-#%%
-#########################
-# DERIVATIVE COMPARISON #
-#########################
-lat_state = x0_test
-lat_state_history = tf.TensorArray(tf.float64, size = dataset_testg['num_times'])
-dt_ref     = normalization['time']['time_constant']
-inp_params = dataset_testg['inp_parameters']  # shape (N, num_params)
-dt_int     = t_max/dataset_testg['num_times']
-
-for i in tf.range(dataset_testg['num_times'] - tf.constant(1)):
-    inputs = [lat_state, inp_params]
-    nn     = NNdyn(tf.concat(inputs, axis = -1))
-    lat_state = lat_state + dt_int/dt_ref * nn
-    lat_state_history = lat_state_history.write(i, nn)
-computed_der = tf.transpose(lat_state_history.stack(), perm=(1,0,2))
-
-true_der = tf.TensorArray(tf.float64, size = NTest)
-for i in range(NTest):
-    v_der = dataset_testg['out_fields'][i,:,1]
-    w_der = -(0.5*dataset_testg['inp_parameters'][i]+0.5)**2 * dataset_testg['out_fields'][i,:,0]
-    true_der = true_der.write(i, np.stack((v_der,w_der), axis=-1))
-true_der = tf.transpose(true_der.stack(), perm=(0,1,2))
-
-for i in range(0,NTest,25):
-    fig, ax = plt.subplots()
-    ax.plot(t_num[0,:], computed_der[i,:,0], 'k--', label='v pred der')
-    ax.plot(t_num[0,:], true_der[i,:,0], 'r-', label='v true der')
-    ax.plot(t_num[0,:], computed_der[i,:,1], 'b--', label='w pred der')
-    ax.plot(t_num[0,:], true_der[i,:,1], 'g-', label='w true der')
-    ax.set_xlabel('Time')
-    ax.set_ylabel('Derivative')
-    ax.set_title('NeuralODE: Derivata predetta vs vera')
-    ax.grid(True)
-    ax.legend(loc='upper right')
-    plt.savefig(folder + 'derivative_comparison' + str(i) + '.png')
-
-#%%
-###############################
-# DERIVATIVE AND LATENT SPACE #
-###############################
-trajectory_index  = 0
-derivative_coarse = tf.TensorArray(tf.float64, size = dataset_testg['num_times'])
-derivative_fine   = tf.TensorArray(tf.float64, size = dataset_test_fine['num_times'])
-input_parameter   = dataset_testg['inp_parameters'][trajectory_index]
-
-for i in range(int(t_max/dt_num)):
-    lat_state = dataset_testg['out_fields'][trajectory_index,i,:]
-    #lat_state = variables3[trajectory_index,i,:]
-    fixed_tf  = tf.constant(lat_state, dtype=tf.float64)
-    result    = tf.concat([fixed_tf, input_parameter], axis=0)
-    result    = tf.expand_dims(result, axis=0)
-    derivative_coarse = derivative_coarse.write(i, NNdyn(result))
-derivative_coarse = tf.transpose(derivative_coarse.stack(), perm=(1,0,2))
-
-
-for i in range(int(t_max/dt_test)):
-    lat_state = dataset_test_fine['out_fields'][trajectory_index,i,:]
-    #lat_state = variables4[trajectory_index,i,:]
-    fixed_tf  = tf.constant(lat_state, dtype=tf.float64)
-    result    = tf.concat([fixed_tf, input_parameter], axis=0)
-    result    = tf.expand_dims(result, axis=0)
-    derivative_fine = derivative_fine.write(i, NNdyn(result))
-derivative_fine = tf.transpose(derivative_fine.stack(), perm=(1,0,2))
-
-
-import plotly.graph_objects as go
-XYc  = dataset_testg['out_fields'][trajectory_index,:,:]
-XYf  = dataset_test_fine['out_fields'][trajectory_index,:,:]
-xc   = XYc[:,0]
-yc   = XYc[:,1]
-xf   = XYf[:,0]
-yf   = XYf[:,1]
-fig = go.Figure(data=[
-    go.Scatter3d(
-        x=dataset_testg['out_fields'][trajectory_index,:,0], y=dataset_testg['out_fields'][trajectory_index,:,1], z=derivative_coarse[0,:,0],
-        mode='markers',
-        marker=dict(size=3, color='blue'),
-        name='Coarse v derivative'
-    )
-])
-fig.add_trace(
-    go.Scatter3d(
-        x=dataset_test_fine['out_fields'][trajectory_index,:,0], y=dataset_test_fine['out_fields'][trajectory_index,:,1], z=derivative_fine[0,:,0],
-        mode='markers',
-        marker=dict(size=2, color='red'),
-        name='Fine v derivative'
-    )
-)
-fig.add_trace(
-    go.Scatter3d(
-        x=dataset_testg['out_fields'][trajectory_index,:,0], y=dataset_testg['out_fields'][trajectory_index,:,1], z=dataset_testg['out_fields'][trajectory_index,:,1],
-        mode='markers',
-        marker=dict(size=3, color='black'),
-        name='True v derivative'
-    )
-)
-fig.update_layout(
-    scene=dict(
-        xaxis_title='x',
-        yaxis_title='y',
-        zaxis_title='z'
-    ),
-    margin=dict(l=0, r=0, b=0, t=30),
-    title="Superficie 3D (punti sparsi)"
-)
-fig.show()
-
-fig = go.Figure(data=[
-    go.Scatter3d(
-        x=variables3[trajectory_index,:,0], y=variables3[trajectory_index,:,1], z=derivative_coarse[0,:,1],
-        mode='markers',
-        marker=dict(size=3, color='blue'),
-        name='Coarse w derivative'
-    )
-])
-fig.add_trace(
-    go.Scatter3d(
-        x=variables4[trajectory_index,:,0], y=variables4[trajectory_index,:,1], z=derivative_fine[0,:,1],
-        mode='markers',
-        marker=dict(size=2, color='red'),
-        name='Fine w derivative'
-    )
-)
-fig.add_trace(
-    go.Scatter3d(
-        x=dataset_testg['out_fields'][trajectory_index,:,0], y=dataset_testg['out_fields'][trajectory_index,:,1], z=-(0.5*input_parameter+0.5)**2*dataset_testg['out_fields'][trajectory_index,:,0],
-        mode='markers',
-        marker=dict(size=3, color='black'),
-        name='True w derivative'
-    )
-)
-fig.update_layout(
-    scene=dict(
-        xaxis_title='x',
-        yaxis_title='y',
-        zaxis_title='z'
-    ),
-    margin=dict(l=0, r=0, b=0, t=30),
-    title="Superficie 3D (punti sparsi)"
-)
-fig.show()
-
-#%%
-######################
-# FORWARD EULER TEST #
-######################
-def evolve_dynamics2_exact(dataset, initial_lat_state, dt):
-
-    lat_state = initial_lat_state
-    lat_state_history = tf.TensorArray(tf.float64, size=int(t_max/dt))
-    lat_state_history = lat_state_history.write(0, lat_state)
-
-    dt_ref = normalization['time']['time_constant']
-    dt_int = dt
-
-    for i in tf.range(int(t_max/dt) - 1):
-
-        lat_state = lat_state + (dt_int/dt_ref)*lat_state
-        lat_state_history = lat_state_history.write(i+1, lat_state)
-
-    return tf.transpose(lat_state_history.stack(), perm=(1,0,2))
-
-dt1 = 0.125
-dt2 = 0.125/2
-v1  = evolve_dynamics2_exact(dataset_test_fine,x0_test,dt1)
-v2  = evolve_dynamics2_exact(dataset_test_fine,x0_test,dt2)
-
-
-fig, ax = plt.subplots()
-ax.plot(np.arange(0,5,dt1), v1[0,0:int(5/dt1),0], 'r-', label='v dt1')
-ax.plot(np.arange(0,5,dt2), v2[0,0:int(5/dt2),0], 'k--', label='v dt2')
-ax.plot(np.arange(0,5,dt1), v1[0,0:int(5/dt1),1], 'g-', label='w dt1')
-ax.plot(np.arange(0,5,dt2), v2[0,0:int(5/dt2),1], 'b--', label='w dt2')
-ax.set_xlabel('Time')
-ax.set_ylabel('State')
-ax.grid(True)
-ax.legend(loc='upper right')
-plt.savefig(folder + 'forw_euler.png')
-
 
 #%%
 #########################
 # EXTENDED TRAJECTORIES #
 #########################
-variables_ext = evolve_dynamics(dataset_test_ext, x0_test_ext)
+variables_ext, _, _ = evolve_dynamics_symplectic(dataset_test_ext, x0_test_ext)
 tt_ext    = t_num_ext[0,:]
 tt_comp   = np.setdiff1d(tt_ext, tt)
 
@@ -1167,59 +888,6 @@ for i in range(0,NTest_ext,5):
     plt.savefig(folder + 'test_extended_' + str(i) + '.png')
 
 #%%
-###################
-# COARSE TRAINING #
-###################
-if coarse_training == 1:
-    losses_dict = {'Standard': loss_train_coarse, 'MatrixNorm': loss_train_matrixnorm}        
-    opt_train   = optimization.OptimizationProblem(trainable_variables_train, losses_dict, val_metric)
-    num_epochs_Adam_train        = 2500 #500
-    num_epochs_BFGS_train        = 3000 #1000
-    num_epochs_BFGS_matrix_train = 3000
-
-    print('training (Adam)...')
-    init_adam_time = time.time()
-    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-2))
-    end_adam_time = time.time()
-
-    print('training (Adam)...')
-    init_adam_time = time.time()
-    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=5e-3))
-    end_adam_time = time.time()
-
-    print('training (Adam)...')
-    init_adam_time = time.time()
-    opt_train.optimize_keras(num_epochs_Adam_train, tf.keras.optimizers.Adam(learning_rate=1e-3))
-    end_adam_time = time.time()
-
-    print('training (BFGS)...')
-    init_bfgs_time = time.time()
-    opt_train.optimize_BFGS(num_epochs_BFGS_train)
-    end_bfgs_time = time.time()
-
-    print('training (BFGS)...')
-    init_bfgs_time = time.time()
-    opt_train.optimize_BFGS(num_epochs_BFGS_train)
-    end_bfgs_time = time.time()
-
-    tt         = t_num[0,:]
-    variables3 = evolve_dynamics(dataset_testg, x0_test)
-    for i in range(0,NTest,25):
-        fig, ax = plt.subplots()
-        ax.plot(tt, testing_target[i,:,0], 'r-', label='v true')
-        ax.plot(tt, 5/2*variables3[i,:,0], 'k--', label='v pred')
-        ax.plot(tt, testing_target[i,:,1], 'g-', label='w true')
-        ax.plot(tt, 5/2*variables3[i,:,1], 'b--', label='w pred')
-        ax.set_xlabel('Time')
-        ax.set_ylabel('State')
-        ax.set_title('NeuralODE: Traiettoria vera vs predetta')
-        ax.grid(True)
-        ax.legend(loc='upper right')
-        plt.savefig(folder + 'test' + str(i) + '.png')
-
-    train_times = [end_adam_time - init_adam_time, end_bfgs_time - init_bfgs_time]
-
-#%%
 ################
 # MODEL SAVING #
 ################
@@ -1229,108 +897,8 @@ if os.path.exists(folder_models) == False:
     os.mkdir(folder_models)
 
 # NNdyn.save(folder_models + '/MSE_TopoLoss_SympEu.keras')
-model = tf.keras.models.load_model(folder_models + '/MSE_TopoLoss_SympEu.keras')
+# model = tf.keras.models.load_model(folder_models + '/MSE_TopoLoss_SympEu.keras')
 
-#%%
-###################
-# RESULTS SUMMARY #
-###################
-if coarse_training == 0:
-    print('Training loss: ', loss_train().numpy())
-if coarse_training == 1:
-    print('Training loss: ', loss_train_coarse().numpy())
-print('Training error: ', val_train().numpy())
-print('Testing error: ', loss_valid().numpy())
-print('Extended testing error: ', loss_valid_ext().numpy())
-
-#%%
-############################
-# NON COARSE RESULTS PLOTS #
-############################
-if coarse_training == 0:
-    variables = evolve_dynamics(dataset_testg, x0_test)
-    num_plot  = 6
-    rand_vec  = [0,1,2,3,4,5] #np.random.randint(0,NTest,num_plot)
-    tt        = t_num[0,:]
-
-    fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
-
-    for i in range(2):
-        for j in range(int(num_plot/2)):
-            ind = rand_vec[2*i+j]
-            axs[i,j].plot(tt, testing_target[ind,:,0], 'r-', label='v true')
-            axs[i,j].plot(tt, 5/2*variables[ind,:,0], 'k--', label='v pred')
-            axs[i,j].plot(tt, testing_target[ind,:,1], 'g-', label='w true')
-            axs[i,j].plot(tt, 5/2*variables[ind,:,1], 'b--', label='w pred')
-            axs[i,j].set_xlabel('Time')
-            axs[i,j].set_ylabel('State')
-            axs[i,j].set_title('NeuralODE: Traiettoria vera vs predetta')
-            axs[i,j].grid(True)
-            axs[i,j].legend(loc='upper right')
-
-    plt.savefig(folder + 'test.png')
-
-#%%
-########################
-# COARSE RESULTS PLOTS #
-########################
-
-if coarse_training == 1:
-    variables = evolve_dynamics(dataset_coarse, x0_test)
-    num_plot  = 4
-    rand_vec  = np.random.randint(0,50,num_plot)
-    tt        = t_num[0,:]
-    indexes   = dataset_coarse['coarse_indexes']
-
-    fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
-
-    for i in range(2):
-        for j in range(int(num_plot/2)):
-            ind = rand_vec[2*i+j]
-            axs[i,j].plot(tt[indexes], testing_target[ind,indexes,0], 'r-', label='v true (coarse)')
-            #axs[i,j].plot(tt, testing_target[ind,:,0], 'y--', label='v true')
-            axs[i,j].plot(tt, 5/2*variables[ind,:,0], 'k--', label='v pred')
-            axs[i,j].plot(tt[indexes], testing_target[ind,indexes,1], 'g-', label='w true (coarse)')
-            #axs[i,j].plot(tt, testing_target[ind,:,1], 'y-', label='w true')
-            axs[i,j].plot(tt, 5/2*variables[ind,:,1], 'b--', label='w pred')
-            axs[i,j].set_xlabel('Time')
-            axs[i,j].set_ylabel('State')
-            axs[i,j].set_title('NeuralODE: Traiettoria vera vs predetta')
-            axs[i,j].grid(True)
-            axs[i,j].legend(loc='upper right')
-
-    plt.savefig(folder + 'test.png')
-
-#%%
-##########################
-# EXTENDED RESULTS PLOTS #
-##########################
-
-variables = evolve_dynamics(dataset_test_ext, x0_test_ext)
-num_plot  = 4
-rand_vec  = np.random.randint(0,50,num_plot)
-tt        = t_num[0,:]
-tt_ext    = t_num_ext[0,:]
-tt_comp   = np.setdiff1d(tt_ext, tt)
-
-fig, axs = plt.subplots(2,int(num_plot/2), figsize=(15,9))
-
-for i in range(2):
-    for j in range(int(num_plot/2)):
-        ind = rand_vec[2*i+j]
-        axs[i,j].plot(tt, testing_target_ext[ind,:len(tt),0], 'r-', label='v true')
-        axs[i,j].plot(tt_comp, testing_target_ext[ind,len(tt):,0], 'y-', label='v true ext', linewidth=2)
-        axs[i,j].plot(tt_ext, 5/2*variables[ind,:,0], 'k--', label='v pred')
-        axs[i,j].plot(tt, testing_target_ext[ind,:len(tt),1], 'g-', label='w true')
-        axs[i,j].plot(tt_comp, testing_target_ext[ind,len(tt):,1], 'y-', label='w true ext', linewidth=2)
-        axs[i,j].plot(tt_ext, 5/2*variables[ind,:,1], 'b--', label='w pred')
-        axs[i,j].set_xlabel('Time')
-        axs[i,j].set_ylabel('State')
-        axs[i,j].set_title('NeuralODE: Traiettoria vera vs predetta')
-        axs[i,j].grid(True)
-        axs[i,j].legend(loc='upper right')
-
-plt.savefig(folder + 'test_extended.png')
 #%% Saving results
 if os.path.exists(folder_train) == False:
     os.mkdir(folder_train)
