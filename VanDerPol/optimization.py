@@ -104,9 +104,6 @@ class OptimizationProblem():
             self.loss_valid_history.append(self.ag_valid_loss())
             print('epoch% 5d   -   training loss: %1.3e   -   Test MSE: %1.3e   -   Test MN: %1.3e' % 
                   (self.iteration, self.loss_train_history[-1], self.loss_valid_history[-1][0], self.loss_valid_history[-1][1]))
-            with open('results8_hlayers_1/training_data.txt', "a") as f:
-                 f.write('epoch% 5d   -   training loss: %1.3e   -   Test MSE: %1.3e   -   Test MN: %1.3e \n' % 
-                  (self.iteration, self.loss_train_history[-1], self.loss_valid_history[-1][0], self.loss_valid_history[-1][1]))
         self.iteration += 1
    
     def basin_hopping_callback(self, x, f, accept):
